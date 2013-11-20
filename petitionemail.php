@@ -70,10 +70,10 @@ function petitionemail_civicrm_managed(&$entities) {
 }
 
 function petitionemail_civicrm_buildForm( $formName, &$form ) {
+dsm($formName);
   if ($formName == 'CRM_Campaign_Form_Petition_Signature') {  
     $survey_id = $form->getVar('_surveyId');
     if ($survey_id) {
-      //$petitioninfo_params = array('survey_id' => $survey_id);
       $petitionemailval_sql = "SELECT petition_id, 
                                       recipient_email, 
                                       recipient_name, 
@@ -81,27 +81,27 @@ function petitionemail_civicrm_buildForm( $formName, &$form ) {
                                       message_field, 
                                       subject 
                                  FROM civicrm_petition_email 
-                                WHERE petition_id = $survey_id";
-      $petitionemailval = CRM_Core_DAO::executeQuery( $petitionemailval_sql, CRM_Core_DAO::$_nullArray );
-      $petitioninfo = $petitionemailval->fetch();
+                                WHERE petition_id = %1";
+      $petitionemailval_params = array( 1 => array( $survey_id, 'Integer' ) );
+      $petitionemailval = CRM_Core_DAO::executeQuery( $petitionemailval_sql, $petitionemailval_params );
+      while ($petitionemailval->fetch()) {
  
-      $defaults = $form->getVar('_defaults');
-      $messagefield = 'custom_' . $petitioninfo->message_field;
-      foreach ($form->_elements as $element) {
-        if ($element->_attributes['name'] == $messagefield) { 
-          $element->_value = $petitioninfo->default_message; 
+        $defaults = $form->getVar('_defaults');
+        $messagefield = 'custom_' . $petitionemailval->message_field;
+        foreach ($form->_elements as $element) {
+          if ($element->_attributes['name'] == $messagefield) { 
+            $element->_value = $petitionemailval->default_message; 
+          }
         }
+        $defaults[$messagefield] = $form->_defaultValues[$messagefield] = $petitionemailval->default_message;
+        $form->setVar('_defaults',$defaults);
       }
-      $defaults[$messagefield] = $form->_defaultValues[$messagefield] = $petitioninfo->default_message;
-      $form->setVar('_defaults',$defaults);
-      
     }
   }
 
   if ($formName != 'CRM_Campaign_Form_Petition') { return; }
   $survey_id = $form->getVar('_surveyId');
   if ($survey_id) {
-    //$petitioninfo_params = array('survey_id' => $survey_id);
     $petitionemailval_sql = "SELECT petition_id, 
                                     recipient_email, 
                                     recipient_name, 
@@ -109,16 +109,18 @@ function petitionemail_civicrm_buildForm( $formName, &$form ) {
                                     message_field, 
                                     subject 
                                FROM civicrm_petition_email 
-                              WHERE petition_id = $survey_id";
-    $petitionemailval = CRM_Core_DAO::executeQuery( $petitionemailval_sql, CRM_Core_DAO::$_nullArray );
-    $petitioninfo = $petitionemailval->fetch();
+                              WHERE petition_id = %1";
+    $petitionemailval_params = array( 1 => array( $survey_id, 'Integer' ) );
+    $petitionemailval = CRM_Core_DAO::executeQuery( $petitionemailval_sql, $petitionemailval_params );
+    while ($petitionemailval->fetch()) {
 
-    $form->_defaultValues['email_petition'] = 1;
-    $form->_defaultValues['recipient_name'] = $petitioninfo->recipient_name;
-    $form->_defaultValues['recipient'] = $petitioninfo->recipient_email;
-    $form->_defaultValues['default_message'] = $petitioninfo->default_message;
-    $form->_defaultValues['user_message'] = $petitioninfo->message_field;
-    $form->_defaultValues['subjectline'] = $petitioninfo->subject;
+      $form->_defaultValues['email_petition'] = 1;
+      $form->_defaultValues['recipient_name'] = $petitionemailval->recipient_name;
+      $form->_defaultValues['recipient'] = $petitionemailval->recipient_email;
+      $form->_defaultValues['default_message'] = $petitionemailval->default_message;
+      $form->_defaultValues['user_message'] = $petitionemailval->message_field;
+      $form->_defaultValues['subjectline'] = $petitionemailval->subject;
+    }
   }
   $form->add('checkbox', 'email_petition', ts('Send an email to a target'));
   $form->add('text', 'recipient_name', ts('Recipient\'s Name'));
@@ -317,36 +319,54 @@ function petitionemail_civicrm_postProcess( $formName, &$form ) {
     $user_message = intval($form->_submitValues['user_message']);
     $subjectline = $form->_submitValues['subjectline'];
 
-    //$petitioninfo_params = array('survey_id' => $survey_id);
     $checkexisting_sql ="SELECT COUNT(*) AS count 
-                           FROM civicrm_petition_email} 
-                          WHERE petition_id = $survey_id";
+                           FROM civicrm_petition_email
+                          WHERE petition_id = %1";
+    $checkexisting_params = array( 1 => array( $survey_id, 'Integer' ) );
 
-    $checkexisting = CRM_Core_DAO::singleValueQuery( $checkexisting_sql );
+    $checkexisting = CRM_Core_DAO::singleValueQuery( $checkexisting_sql, $checkexisting_params );
     if ( $checkexisting == 0 ) {
-      $petitionemail_data = "INSERT INTO civicrm_petition_email
-                                         (petition_id, 
-                                         recipient_email, 
-                                         recipient_name, 
-                                         default_message, 
-                                         message_field, 
-                                         subject) 
-                                  VALUES $survey_id, 
-                                         $recipient, 
-                                         $recipient_name, 
-                                         $default_message, 
-                                         $user_message, 
-                                         $subjectline )"
+      $petitionemail_data_sql = "INSERT INTO civicrm_petition_email (
+                                             petition_id, 
+                                             recipient_email, 
+                                             recipient_name, 
+                                             default_message, 
+                                             message_field, 
+                                             subject
+                                    ) VALUES ( 
+                                             %1, 
+                                             %2, 
+                                             %3, 
+                                             %4, 
+                                             %5, 
+                                             %6 
+                                    )";
+
+      $petitionemail_data_params = array( 1 => array( $survey_id, 'Integer' ),
+                                          2 => array( $recipient, 'String' ),
+                                          3 => array( $recipient_name, 'String' ),
+                                          4 => array( $default_message, 'String' ),
+                                          5 => array( $user_message, 'String' ),
+                                          6 => array( $subjectline, 'String' ),
+                                         );
     } else {
-      $petitionemail_data = "UPDATE civicrm_petition_email
-                                SET recipient_email = $recipient
-                                         recipient_name = $recipient_name
-                                         default_message = $default_message
-                                         message_field = $user_message
-                                         subject = $subject 
-                              WHERE petition_id = $survey_id";
+      $petitionemail_data_sql = "UPDATE civicrm_petition_email
+                                    SET recipient_email = %2
+                                        recipient_name = %3
+                                        default_message = %4
+                                        message_field = %5
+                                        subject = %6
+                                  WHERE petition_id = %1";
+
+      $petitionemail_data_params = array( 1 => array( $survey_id, 'Integer' ),
+                                          2 => array( $recipient, 'String' ),
+                                          3 => array( $recipient_name, 'String' ),
+                                          4 => array( $default_message, 'String' ),
+                                          5 => array( $user_message, 'String' ),
+                                          6 => array( $subjectline, 'String' ),
+                                         );
     }
-    $petitionemail = CRM_Core_DAO::executeQuery( $petitionemail_data, CRM_Core_DAO::$_nullArray );
+    $petitionemail = CRM_Core_DAO::executeQuery( $petitionemail_data_sql, $petitionemail_data_params );
 
     //FIXME Add failed database write check
     //if (!$insert) {
@@ -367,12 +387,14 @@ function petitionemail_civicrm_post( $op, $objectName, $objectId, &$objectRef ) 
 
   if ($op == 'create' && $objectName == 'Activity') {
     require_once 'api/api.php';
-    $petitiontype = civicrm_petition_email_get_petition_type();
+
+    //FIXME What does the petition type do?  Possible to have multiple Activity Types for Petitions?
+    $petitiontype = petitionemail_get_petition_type();
+
     if ($objectRef->activity_type_id == $petitiontype) {
       $survey_id = $objectRef->source_record_id;
       $activity_id = $objectRef->id;
       global $language;  
-      //$petitionemail_get_params = array('survey_id' => $survey_id);
       $petitionemail_get_sql = "SELECT petition_id, 
                                        recipient_email, 
                                        recipient_name, 
@@ -380,9 +402,12 @@ function petitionemail_civicrm_post( $op, $objectName, $objectId, &$objectRef ) 
                                        message_field, 
                                        subject 
                                   FROM civicrm_petition_email 
-                                 WHERE petition_id = $survey_id";
+                                 WHERE petition_id = %1";
+      $petitionemail_get_params = array( 1 => array( $survey_id, 'Integer' ) );
       $petitionemail_get = CRM_Core_DAO::executeQuery( $petitionemail_get_sql, CRM_Core_DAO::$_nullArray );
+      //FIXME add while
       $petition = $petitionemail_get->fetch();
+
       //FIXME What's the object when the query is empty?
       if(empty($petition) || !array_key_exists('petition_id', $petition) || empty($petition['petition_id'])) {
         // Must not be a petition with a target.

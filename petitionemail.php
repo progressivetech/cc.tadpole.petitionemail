@@ -70,7 +70,6 @@ function petitionemail_civicrm_managed(&$entities) {
 }
 
 function petitionemail_civicrm_buildForm( $formName, &$form ) {
-dsm($formName);
   if ($formName == 'CRM_Campaign_Form_Petition_Signature') {  
     $survey_id = $form->getVar('_surveyId');
     if ($survey_id) {
@@ -351,10 +350,10 @@ function petitionemail_civicrm_postProcess( $formName, &$form ) {
                                          );
     } else {
       $petitionemail_data_sql = "UPDATE civicrm_petition_email
-                                    SET recipient_email = %2
-                                        recipient_name = %3
-                                        default_message = %4
-                                        message_field = %5
+                                    SET recipient_email = %2,
+                                        recipient_name = %3,
+                                        default_message = %4,
+                                        message_field = %5,
                                         subject = %6
                                   WHERE petition_id = %1";
 
@@ -388,7 +387,6 @@ function petitionemail_civicrm_post( $op, $objectName, $objectId, &$objectRef ) 
   if ($op == 'create' && $objectName == 'Activity') {
     require_once 'api/api.php';
 
-    //FIXME What does the petition type do?  Possible to have multiple Activity Types for Petitions?
     $petitiontype = petitionemail_get_petition_type();
 
     if ($objectRef->activity_type_id == $petitiontype) {
@@ -404,109 +402,96 @@ function petitionemail_civicrm_post( $op, $objectName, $objectId, &$objectRef ) 
                                   FROM civicrm_petition_email 
                                  WHERE petition_id = %1";
       $petitionemail_get_params = array( 1 => array( $survey_id, 'Integer' ) );
-      $petitionemail_get = CRM_Core_DAO::executeQuery( $petitionemail_get_sql, CRM_Core_DAO::$_nullArray );
-      //FIXME add while
-      $petition = $petitionemail_get->fetch();
-
-      //FIXME What's the object when the query is empty?
-      if(empty($petition) || !array_key_exists('petition_id', $petition) || empty($petition['petition_id'])) {
-        // Must not be a petition with a target.
-        return;
-      }
-
-      // FIXME the object references below need to be checked.
-      // Set up variables for the email message
-      // Figure out whether to use the user-supplied message or the default message
-      $petition_message = NULL;
-      // If the petition has specified a message field, and we've encountered the profile post action....
-      if(!empty($petition->message_field) && !is_null($profile_fields)) {
-        if(is_numeric($petition->message_field)) {
-          $message_field = 'custom_' . $petition->message_field;
+      $petitionemail_get = CRM_Core_DAO::executeQuery( $petitionemail_get_sql, $petitionemail_get_params );
+      while ($petitionemail_get->fetch() ) {
+        if($petitionemail_get->petition_id == NULL) {
+          // Must not be a petition with a target.
+          return;
         }
-        else {
-          $message_field = $petition->message_field;
-        }
-        // If the field is in the profile
-        if(array_key_exists($message_field, $profile_fields)) {
-          // If it's not empty...
-          if(!empty($profile_fields[$message_field])) {
-            $petition_message = $profile_fields[$message_field];
+
+        // Set up variables for the email message
+        // Figure out whether to use the user-supplied message or the default message
+        $petition_message = NULL;
+        // If the petition has specified a message field, and we've encountered the profile post action....
+        if(!empty($petitionemail_get->message_field) && !is_null($profile_fields)) {
+          if(is_numeric($petition->message_field)) {
+            $message_field = 'custom_' . $petitionemail_get->message_field;
           }
+          else {
+            $message_field = $petitionemail_get->message_field;
+          }
+          // If the field is in the profile
+          if(array_key_exists($message_field, $profile_fields)) {
+            // If it's not empty...
+            if(!empty($profile_fields[$message_field])) {
+              $petition_message = $profile_fields[$message_field];
+            }
+          }
+        } 
+        // No user supplied message, use the default
+        if(is_null($petition_message)) {
+          $petition_message = $petitionemail_get->default_message;
         }
-      }
-      // No user supplied message, use the default
-      if(is_null($petition_message)) {
-        $petition_message = $petition->default_message;
-      }
-      $to = $petition->recipient_name . ' <' . $petition->recipient_email . '>';
-      $from = civicrm_api("Contact",
-                          "getsingle", 
-                          array ('version' => '3',
-                                 'sequential' =>'1', 
-                                 'id' =>$objectRef->source_contact_id)
-                         );
-      if (array_key_exists('email', $from) && !empty($from['email'])) {
-        $from = $from['display_name'] . ' <' . $from['email'] . '>';
-      } else {
-        $domain = civicrm_api("Domain",
-                              "get", 
-                              array ('version' => '3',
-                                     'sequential' =>'1')
-                              );
-        if ($domain['is_error'] != 0 || !is_array($domain['values'])) { 
-          // Can't send email without a from address.
-          return; 
+        $to = $petitionemail_get->recipient_name . ' <' . $petitionemail_get->recipient_email . '>';
+        $from = civicrm_api("Contact",
+                            "getsingle", 
+                            array ('version' => '3',
+                                   'sequential' =>'1', 
+                                   'id' =>$objectRef->source_contact_id)
+                           );
+        if (array_key_exists('email', $from) && !empty($from['email'])) {
+          $from = $from['display_name'] . ' <' . $from['email'] . '>';
+        } else {
+          $domain = civicrm_api("Domain",
+                                "get", 
+                                array ('version' => '3',
+                                       'sequential' =>'1')
+                                );
+          if ($domain['is_error'] != 0 || !is_array($domain['values'])) { 
+            // Can't send email without a from address.
+            return; 
+          }
+          $from = '"' . $from['display_name'] . '"' . ' <' . $domain['values']['from_email'] . '>';
         }
-        $from = '"' . $from['display_name'] . '"' . ' <' . $domain['values']['from_email'] . '>';
-      }
 
-      // Setup email message
-      // FIXME CiviCRM drupal_mail() equivalent?
-      $params = array( 
-        'subject' => $petition['subject'],
-        'message' => $petition_message, 
-      );
-      $success = drupal_mail('civicrm_petition_email', 'signature', $to, $language, $params, $from);
-      if($success['result']) {
-        CRM_Core_Session::setStatus( ts('Message sent successfully to') . " $to" );
-      } else {
-        CRM_Core_Session::setStatus( ts('Error sending message to') . " $to" );
+        // Setup email message
+        //FIXME $from is malformed
+        $email_params = array( 
+          'from'    => $from,
+          'toName'  => $petitionemail_get->recipient_name,
+          'toEmail' => $petitionemail_get->recipient_email,
+          'subject' => $petitionemail_get->subject,
+          'text'    => $petition_message, 
+          'html'    => $petition_message
+        );
+        $success = CRM_Utils_Mail::send($email_params);
+
+        if($success == 1) {
+          CRM_Core_Session::setStatus( ts('Message sent successfully to') . " $to" );
+        } else {
+          CRM_Core_Session::setStatus( ts('Error sending message to') . " $to" );
+        }
       }
     }
   }
 }
  
-//FIXME What is this for?
-function petitionemail_mail($key, &$message, $params) {
-  $message['subject'] = $params['subject'];
-  $message['body'][] = $params['message'];
-} 
-
 function petitionemail_get_petition_type() {
-  //FIXME setting an option is the equivalent?
-  $petitiontype = variable_get('civicrm_petition_email_petitiontype', false);
-  
-  if ( !$petitiontype ) { // Go figure out and set the activity type id
-    $acttypegroup = civicrm_api("OptionGroup",
-                                "getsingle", 
-                                array('version' => '3',
-                                      'sequential' =>'1', 
-                                      'name' =>'activity_type')
-                               );
-    if ( $acttypegroup['id'] && !$acttypegroup['is_error'] ) {
-      $acttype = civicrm_api("OptionValue",
-                             "getsingle", 
-                             array ('version' => '3',
-                                    'sequential' => '1', 
-                                    'option_group_id' => $acttypegroup['id'], 
-                                    'name' =>'Petition')
-                            );
-      if ( $acttype['id'] && !$acttype['is_error'] ) {
-        $petitiontype = $acttype['value'];
-        //FIXME setting an option is the equivalent?
-        variable_set('civicrm_petition_email_petitiontype', $acttype['value']);
-      }
-    }
+  $acttypegroup = civicrm_api("OptionGroup",
+                              "getsingle", 
+                              array('version' => '3',
+                                    'sequential' =>'1', 
+                                    'name' =>'activity_type')
+                             );
+  if ( $acttypegroup['id'] && !$acttypegroup['is_error'] ) {
+    $acttype = civicrm_api("OptionValue",
+                           "getsingle", 
+                           array ('version' => '3',
+                                  'sequential' => '1', 
+                                  'option_group_id' => $acttypegroup['id'], 
+                                  'name' =>'Petition')
+                          );
+    $petitiontype = $acttype['value'];
   }
     
   return $petitiontype;

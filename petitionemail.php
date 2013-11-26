@@ -387,8 +387,10 @@ function petitionemail_civicrm_post( $op, $objectName, $objectId, &$objectRef ) 
   if ($op == 'create' && $objectName == 'Activity') {
     require_once 'api/api.php';
 
+    //Check what the Petition Activity id is
     $petitiontype = petitionemail_get_petition_type();
 
+    //Only proceed if the Petition Activity is being created
     if ($objectRef->activity_type_id == $petitiontype) {
       $survey_id = $objectRef->source_record_id;
       $activity_id = $objectRef->id;
@@ -414,7 +416,7 @@ function petitionemail_civicrm_post( $op, $objectName, $objectId, &$objectRef ) 
         $petition_message = NULL;
         // If the petition has specified a message field, and we've encountered the profile post action....
         if(!empty($petitionemail_get->message_field) && !is_null($profile_fields)) {
-          if(is_numeric($petition->message_field)) {
+          if(is_numeric($petitionemail_get->message_field)) {
             $message_field = 'custom_' . $petitionemail_get->message_field;
           }
           else {
@@ -433,11 +435,17 @@ function petitionemail_civicrm_post( $op, $objectName, $objectId, &$objectRef ) 
           $petition_message = $petitionemail_get->default_message;
         }
         $to = $petitionemail_get->recipient_name . ' <' . $petitionemail_get->recipient_email . '>';
+        $activity = civicrm_api("Activity",
+                                "getsingle", 
+                                array ('version' => '3',
+                                       'sequential' =>'1', 
+                                       'id' =>$objectId)
+                               );
         $from = civicrm_api("Contact",
                             "getsingle", 
                             array ('version' => '3',
                                    'sequential' =>'1', 
-                                   'id' =>$objectRef->source_contact_id)
+                                   'id' =>$activity['source_contact_id'])
                            );
         if (array_key_exists('email', $from) && !empty($from['email'])) {
           $from = $from['display_name'] . ' <' . $from['email'] . '>';
@@ -455,7 +463,6 @@ function petitionemail_civicrm_post( $op, $objectName, $objectId, &$objectRef ) 
         }
 
         // Setup email message
-        //FIXME $from is malformed
         $email_params = array( 
           'from'    => $from,
           'toName'  => $petitionemail_get->recipient_name,
@@ -477,13 +484,14 @@ function petitionemail_civicrm_post( $op, $objectName, $objectId, &$objectRef ) 
 }
  
 function petitionemail_get_petition_type() {
+  require_once 'api/api.php';
   $acttypegroup = civicrm_api("OptionGroup",
                               "getsingle", 
                               array('version' => '3',
                                     'sequential' =>'1', 
                                     'name' =>'activity_type')
                              );
-  if ( $acttypegroup['id'] && !$acttypegroup['is_error'] ) {
+  if ( $acttypegroup['id'] && !isset($acttypegroup['is_error']) ) {
     $acttype = civicrm_api("OptionValue",
                            "getsingle", 
                            array ('version' => '3',

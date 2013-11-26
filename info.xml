@@ -1,5 +1,6 @@
 <?xml version="1.0"?>
 <extension key="cc.tadpole.petitionemail" type="module">
+  <downloadUrl>http://git.palantetech.coop/tadpole/civicrm/extensions/cc.tadpole.petitionemail/</downloadUrl>
   <file>petitionemail</file>
   <name>Petition Email</name>
   <description>Email petition signatures to a selected recipient</description>

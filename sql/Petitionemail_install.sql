@@ -2,8 +2,7 @@
 -- Table structure for table `civicrm_petition_email`
 --
 
-DROP TABLE IF EXISTS `civicrm_petition_email`;
-CREATE TABLE `civicrm_petition_email` (
+CREATE TABLE IF EXISTS `civicrm_petition_email` (
   `petition_id` int(10) unsigned NOT NULL DEFAULT '0' COMMENT 'The SID of the petition.',
   `recipient_email` varchar(128) DEFAULT NULL COMMENT 'The email of the petition target.',
   `recipient_name` varchar(128) DEFAULT NULL COMMENT 'The display name of the petition target.',

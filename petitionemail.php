@@ -6,6 +6,9 @@ require_once 'petitionemail.civix.php';
  * Implementation of hook_civicrm_config
  */
 function petitionemail_civicrm_config(&$config) {
+  // FIXME adding the javascript only on the alterForm or alterContent
+  // functions doesn't seem to work.
+  CRM_Core_Resources::singleton()->addScriptFile('cc.tadpole.petitionemail', 'petitionemail.js');
   _petitionemail_civix_civicrm_config($config);
 }
 
@@ -122,8 +125,7 @@ function petitionemail_civicrm_buildForm( $formName, &$form ) {
     }
   }
   $form->add('checkbox', 'email_petition', ts('Send an email to a target'));
-  $form->add('text', 'recipient_name', ts('Recipient\'s Name'));
-  $form->add('text', 'recipient', ts('Recipient\'s Email'));
+  $form->add('text', 'recipient', ts("Recipient Name and email"));
   $validcustomgroups = array();
 
   // Get the Profiles in use by this petition so we can find out
@@ -183,107 +185,48 @@ function petitionemail_civicrm_buildForm( $formName, &$form ) {
 
 function petitionemail_civicrm_alterContent(  &$content, $context, $tplName, &$object ) {
   if ($tplName == 'CRM/Campaign/Form/Petition.tpl') {
-    $rendererval = $object->getVar('_renderer');
+    $ret = '';
     $action = $object->getVar('_action');
     if ($action == 8) { return; }
 
     //insert the field before is_active
     $insertpoint = strpos($content, '<tr class="crm-campaign-survey-form-block-is_active">');
 
-    $help_code = "<a class=\"helpicon\" onclick=\"CRM.help('Petition Email', {'id':'id-email-petition','file':'CRM\/Campaign\/Form\/Petition'}); return false;\" href=\"#\" title=\"Petition Email Help\"></a>";
-    $content1 = substr($content, 0, $insertpoint);
-    $content3 = substr($content, $insertpoint);
-    $content2 = '
-  <tr class="crm-campaign-survey-form-block-email_petition">
-    <td class="label">'. $rendererval->_tpl->_tpl_vars['form']['email_petition']['label'] . $help_code . '</td>
-    <td>'.$rendererval->_tpl->_tpl_vars['form']['email_petition']['html'].'
-      <div class="description">'.ts('Should signatures generate an email to the petition\'s  target?') .'</div>
-    </td>
-  </tr>
-  <tr class="crm-campaign-survey-form-block-recipient_name">
-  <td class="label">'. $rendererval->_tpl->_tpl_vars['form']['recipient_name']['label'] .  '</td>
-    <td>'.$rendererval->_tpl->_tpl_vars['form']['recipient_name']['html'].'
-      <div class="description">'.ts('Enter the target\'s name (as he or she should see it) here.').'</div>
-    </td>
-  </tr>
-  <tr class="crm-campaign-survey-form-block-recipient">
-    <td class="label">'. $rendererval->_tpl->_tpl_vars['form']['recipient']['label'] .'</td>
-    <td>'.$rendererval->_tpl->_tpl_vars['form']['recipient']['html'].'
-      <div class="description">'.ts('Enter the target\'s email address here.').'</div>
-    </td>
-  </tr>
-  <tr class="crm-campaign-survey-form-block-user_message">
-    <td class="label">'. $rendererval->_tpl->_tpl_vars['form']['user_message']['label'] .'</td>
-    <td>'.$rendererval->_tpl->_tpl_vars['form']['user_message']['html'].'
-      <div class="description">'.ts('Select a field that will have the signer\'s custom message.  Make sure it is included in the Activity Profile you selected.').'</div>
-    </td>
-  </tr>
-  <tr class="crm-campaign-survey-form-block-default_message">
-    <td class="label">'. $rendererval->_tpl->_tpl_vars['form']['default_message']['label'] .'</td>
-    <td>'.$rendererval->_tpl->_tpl_vars['form']['default_message']['html'].'
-      <div class="description">'.ts('Enter the default message to be included in the email.').'</div>
-    </td>
-  </tr>
-  <tr class="crm-campaign-survey-form-block-subjectline">
-    <td class="label">'. $rendererval->_tpl->_tpl_vars['form']['subjectline']['label'] .'</td>
-    <td>'.$rendererval->_tpl->_tpl_vars['form']['subjectline']['html'].'
-      <div class="description">'.ts('Enter the subject line to be included in the email.').'</div>
-    </td>
-  </tr>
-';
-       
-    // jQuery to show/hide the email fields   
-    $content4 = '
-    <script type="text/javascript">
-      cj(document).ready( function() {
-        showHideEmailPetition();
-        checkProfileIncludesMessage();
-        cj("input#email_petition").click( function() { showHideEmailPetition(); });
-        cj("#profile_id").change( function() { checkProfileIncludesMessage(); });
-        cj("#user_message").change( function() { checkProfileIncludesMessage(); });
-      });
-      
-      function checkProfileIncludesMessage() {
-        cj("#profileMissingMessage").remove();
-        var actProfile = cj("#profile_id").val();
-        cj().crmAPI("UFField","get",{ "sequential" :"1", "uf_group_id" : actProfile },{ success:function (data){    
-          var msgField = cj("#user_message").val();
-          if (msgField) {
-            var fieldinfo = cj.inArray(msgField, data["values"])
-            var matchfield = false;
-            cj.each(data["values"], function(key, value) {
-              if (value["field_name"] == "custom_"+msgField) {
-                matchfield = true;
-                return true;
-              }
-            });
-            if (!matchfield) {
-              cj("#user_message").after("<div id=\'profileMissingMessage\' style=\'background-color: #FF9999; border: 1px solid #CC3333; display: inline-block; font-size: 85%; margin-left: 1ex; padding: 0.5ex; vertical-align: top;\'>'.ts('This field is not in the activity profile you selected').'</div>");
-            }
-          }
-        }
-      });
-      }
-      function showHideEmailPetition() {
-        if( cj("input#email_petition").attr("checked") ) {
-          cj("tr.crm-campaign-survey-form-block-recipient").show("fast");
-          cj("tr.crm-campaign-survey-form-block-recipient_name").show("fast");
-          cj("tr.crm-campaign-survey-form-block-user_message").show("fast");
-          cj("tr.crm-campaign-survey-form-block-default_message").show("fast");
-          cj("tr.crm-campaign-survey-form-block-subjectline").show("fast");
-        } else {
-          cj("tr.crm-campaign-survey-form-block-recipient").hide("fast");
-          cj("tr.crm-campaign-survey-form-block-recipient_name").hide("fast");
-          cj("tr.crm-campaign-survey-form-block-user_message").hide("fast");
-          cj("tr.crm-campaign-survey-form-block-default_message").hide("fast");
-          cj("tr.crm-campaign-survey-form-block-subjectline").hide("fast");
-        }
-      }
-    </script>';
-    
-    $content = $content1.$content2.$content3.$content4;
+    $ret .= substr($content, 0, $insertpoint);
+    $ret .= petitionemail_get_template($object);
+    $ret .= substr($content, $insertpoint);
+    $content = $ret;
   }
 }
+
+function petitionemail_get_template($object) {
+  $rendererval = $object->getVar('_renderer');
+  // Identify the fields to display (keys) with the descriptions that 
+  // should display with them (values)
+  $fields = array(
+    'email_petition' => ts("Should signatures generate an email to the petition's  target?"),
+    'recipient' => ts("Enter targets that receive copies of all petitions in the form: 'First name Last name' <email@example.org>"),
+    'user_message' => ts("Select a field that will have the signer's custom message.  Make sure it is included in the Activity Profile you selected."),
+    'default_message' => ts("Enter the default message to be included in the email."),
+  );
+
+  $ret = '';
+  reset($rendererval->_tpl->_tpl_vars['form']);
+  while(list($k, $v) = each($rendererval->_tpl->_tpl_vars['form'])) {
+    if(array_key_exists($k, $fields)) {
+      $label = $v['label'];
+      $html = $v['html'];
+      $description = $fields[$k];
+      $ret .= ' 
+        <tr class="crm-campaign-survey-form-block-' . $k . '">
+          <td class="label">' . $label . '</td>
+          <td>' .  $html . '<div class="description">' . $description . '</div>
+          </td>
+        </tr>';
+    }
+  }
+  return $ret;
+} 
 
 function petitionemail_civicrm_postProcess( $formName, &$form ) {
   if ($formName != 'CRM_Campaign_Form_Petition') { return; }
@@ -292,13 +235,8 @@ function petitionemail_civicrm_postProcess( $formName, &$form ) {
     $survey_id = $form->getVar('_surveyId');
     $lastmoddate = 0;
     if (!$survey_id) {  // Ugly hack because the form doesn't return the id
-      $surveys = civicrm_api("Survey",
-                             "get", 
-                             array('version' => '3', 
-                                   'sequential' =>'1', 
-                                   'title' =>$form->_submitValues['title']
-                                   )
-                            );
+      $params = array('version' => '3', 'sequential' =>'1', 'title' =>$form->_submitValues['title']);
+      $surveys = civicrm_api("Survey", "get", $params);
       if (is_array($surveys['values'])) {
         foreach($surveys['values'] as $survey) {
           if ($lastmoddate > strtotime($survey['last_modified_date'])) { continue; }

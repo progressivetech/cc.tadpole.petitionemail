@@ -77,8 +77,6 @@ function petitionemail_civicrm_buildForm( $formName, &$form ) {
     $survey_id = $form->getVar('_surveyId');
     if ($survey_id) {
       $petitionemailval_sql = "SELECT petition_id, 
-                                      recipient_email, 
-                                      recipient_name, 
                                       default_message, 
                                       message_field, 
                                       subject 
@@ -101,86 +99,112 @@ function petitionemail_civicrm_buildForm( $formName, &$form ) {
     }
   }
 
-  if ($formName != 'CRM_Campaign_Form_Petition') { return; }
-  $survey_id = $form->getVar('_surveyId');
-  if ($survey_id) {
-    $petitionemailval_sql = "SELECT petition_id, 
-                                    recipient_email, 
-                                    recipient_name, 
-                                    default_message, 
-                                    message_field, 
-                                    subject 
-                               FROM civicrm_petition_email 
-                              WHERE petition_id = %1";
-    $petitionemailval_params = array( 1 => array( $survey_id, 'Integer' ) );
-    $petitionemailval = CRM_Core_DAO::executeQuery( $petitionemailval_sql, $petitionemailval_params );
-    while ($petitionemailval->fetch()) {
-
-      $form->_defaultValues['email_petition'] = 1;
-      $form->_defaultValues['recipient_name'] = $petitionemailval->recipient_name;
-      $form->_defaultValues['recipient'] = $petitionemailval->recipient_email;
-      $form->_defaultValues['default_message'] = $petitionemailval->default_message;
-      $form->_defaultValues['user_message'] = $petitionemailval->message_field;
-      $form->_defaultValues['subjectline'] = $petitionemailval->subject;
+  if ($formName == 'CRM_Campaign_Form_Petition') {
+    $survey_id = $form->getVar('_surveyId');
+    if ($survey_id) {
+      $sql = "SELECT petition_id, 
+                default_message, 
+                message_field, 
+                subject,
+                recipients,
+                location_type_id,
+                group_id
+              FROM civicrm_petition_email 
+              WHERE petition_id = %1";
+      $params = array( 1 => array( $survey_id, 'Integer' ) );
+      $dao = CRM_Core_DAO::executeQuery( $sql, $params );
+      while ($dao->fetch()) {
+        $form->_defaultValues['email_petition'] = 1;
+        $form->_defaultValues['recipients'] = $dao->recipients;
+        $form->_defaultValues['default_message'] = $dao->default_message;
+        $form->_defaultValues['user_message'] = $dao->message_field;
+        $form->_defaultValues['subject'] = $dao->subject;
+        $form->_defaultValues['location_type_id'] = $dao->location_type_id;
+        $form->_defaultValues['group_id'] = $dao->group_id;
+      }
+      // Now get matching fields
+      $sql = "SELECT matching_field FROM civicrm_petition_email_matching_field
+        WHERE petition_id = %1";
+      $dao = CRM_Core_DAO::executeQuery($sql, $params);
+      $matching_fields = array();
+      while($dao->fetch()) {
+        $matching_fields[] = $dao->matching_field;
+      }
+      $form->_defaultValues['matching_fields'] = $matching_fields;
     }
-  }
-  $form->add('checkbox', 'email_petition', ts('Send an email to a target'));
-  $form->add('text', 'recipient', ts("Recipient Name and email"));
-  $validcustomgroups = array();
+    $form->add('checkbox', 'email_petition', ts('Send an email to a target'));
+    $validcustomgroups = array();
 
-  // Get the Profiles in use by this petition so we can find out
-  // if there are any potential fields for an extra message to the
-  // petition target.
-  $params = array('version' => '3', 
-                  'module' => 'CiviCampaign', 
-                  'entity_table' => 'civicrm_survey', 
-                  'entity_id' => $survey_id );
-  $join_results = civicrm_api('UFJoin','get', $params);
-  $custom_fields = array();
-  if ($join_results['is_error'] == 0) {
-    foreach ($join_results['values'] as $join_value) {
-      $uf_group_id = $join_value['uf_group_id'];
+    // Get the Profiles in use by this petition so we can find out
+    // if there are any potential fields for an extra message to the
+    // petition target.
+    $params = array('version' => '3', 
+                    'module' => 'CiviCampaign', 
+                    'entity_table' => 'civicrm_survey', 
+                    'entity_id' => $survey_id );
+    $join_results = civicrm_api('UFJoin','get', $params);
+    $custom_fields = array();
+    if ($join_results['is_error'] == 0) {
+      foreach ($join_results['values'] as $join_value) {
+        $uf_group_id = $join_value['uf_group_id'];
 
-      // Now get all fields in this profile
-      $params = array('version' => 3, 'uf_group_id' => $uf_group_id);
-      $field_results = civicrm_api('UFField', 'get', $params);
-      if ($field_results['is_error'] == 0) {
-        foreach ($field_results['values'] as $field_value) {
-          $field_name = $field_value['field_name'];
-          if(!preg_match('/^custom_[0-9]+/', $field_name)) {
-            // We only know how to lookup field types for custom
-            // fields. Skip core fields.
-            continue;
-          }
+        // Now get all fields in this profile
+        $params = array('version' => 3, 'uf_group_id' => $uf_group_id);
+        $field_results = civicrm_api('UFField', 'get', $params);
+        if ($field_results['is_error'] == 0) {
+          foreach ($field_results['values'] as $field_value) {
+            $field_name = $field_value['field_name'];
+            if(!preg_match('/^custom_[0-9]+/', $field_name)) {
+              // We only know how to lookup field types for custom
+              // fields. Skip core fields.
+              continue;
+            }
 
-          $id = substr(strrchr($field_name, '_'), 1);
-          // Finally, see if this is a text or textarea field.
-          $params = array('version' => 3, 'id' => $id);
-          $custom_results = civicrm_api('CustomField', 'get', $params);
-          if ($custom_results['is_error'] == 0) {
-            $field_value = array_pop($custom_results['values']);
-            $html_type = $field_value['html_type'];
-            $label = $field_value['label'];
-            $id = $field_value['id'];
-            if($html_type == 'Text' || $html_type == 'TextArea') {
-              $custom_fields[$id] = $label;
+            $id = substr(strrchr($field_name, '_'), 1);
+            // Finally, see if this is a text or textarea field.
+            $params = array('version' => 3, 'id' => $id);
+            $custom_results = civicrm_api('CustomField', 'get', $params);
+            if ($custom_results['is_error'] == 0) {
+              $field_value = array_pop($custom_results['values']);
+              $html_type = $field_value['html_type'];
+              $label = $field_value['label'];
+              $id = $field_value['id'];
+              if($html_type == 'Text' || $html_type == 'TextArea') {
+                $custom_fields[$id] = $label;
+              }
             }
           }
         }
       }
     }
+    $custom_message_field_options = array();
+    if(count($custom_fields) == 0) {
+      $custom_message_field_options = array('' => t('- No Text or TextArea fields defined in your profiles -'));
+    }
+    else {
+      $custom_message_field_options = array('' => t('- Select -'));
+      $custom_message_field_options = $custom_message_field_options + $custom_fields;
+    }
+    $choose_one = array('0' => ts('--choose one--'));
+    $group_options = $choose_one + CRM_Core_PseudoConstant::group('Mailing');
+    $location_options = $choose_one + CRM_Core_PseudoConstant::get('CRM_Core_DAO_Address', 'location_type_id');
+    $sql = "SELECT f.id, g.title, f.label FROM civicrm_custom_group g JOIN civicrm_custom_field f ON g.id = f.custom_group_id
+      WHERE g.is_active = 1 AND f.is_active = 1 ORDER BY g.title, f.label";
+    $dao = CRM_Core_DAO::executeQuery($sql);
+    $field_options = array();
+    while($dao->fetch()) {
+      $field_options[$dao->id] = $dao->title . '::' . $dao->label;
+    }
+
+    $form->add('select', 'group_id', ts('Matching Target Group'), $group_options);
+    $form->addElement('advmultiselect', 'matching_fields', ts('Matching field(s)'), $field_options,
+      array('style' => 'width:400px;', 'class' => 'advmultiselect'));
+    $form->add('select', 'location_type_id', ts('Email'), $location_options);
+    $form->add('textarea', 'recipients', ts("Send petitions to"));
+    $form->add('select', 'user_message', ts('Custom Message Field'), $custom_message_field_options);
+    $form->add('textarea', 'default_message', ts('Default Message'));
+    $form->add('text', 'subject', ts('Email Subject Line'));
   }
-  $custom_message_field_options = array();
-  if(count($custom_fields) == 0) {
-    $custom_message_field_options = array('' => t('- No Text or TextArea fields defined in your profiles -'));
-  }
-  else {
-    $custom_message_field_options = array('' => t('- Select -'));
-    $custom_message_field_options = $custom_message_field_options + $custom_fields;
-  }
-  $form->add('select', 'user_message', ts('Custom Message Field'), $custom_message_field_options);
-  $form->add('textarea', 'default_message', ts('Default Message'));
-  $form->add('text', 'subjectline', ts('Email Subject Line'));
 }
 
 function petitionemail_civicrm_alterContent(  &$content, $context, $tplName, &$object ) {
@@ -204,10 +228,14 @@ function petitionemail_get_template($object) {
   // Identify the fields to display (keys) with the descriptions that 
   // should display with them (values)
   $fields = array(
+    'group_id' => ts("Select the group containing the contacst that you want to receive the petition."),
+    'matching_fields' => ts("If the user and the target have the same value for this field, then the user's petition will be sent to the matching target."),
+    'location_type_id' => ts("A target contact can have more than one email address. Choose the email location that should be used when sending the petition."),
     'email_petition' => ts("Should signatures generate an email to the petition's  target?"),
-    'recipient' => ts("Enter targets that receive copies of all petitions in the form: 'First name Last name' <email@example.org>"),
+    'recipients' => ts("Enter additional targets that receive copies of all petitions in the form: 'First name Last name' &lt;email@example.org&gt;. Separate multiple recipients with line breaks."),
     'user_message' => ts("Select a field that will have the signer's custom message.  Make sure it is included in the Activity Profile you selected."),
     'default_message' => ts("Enter the default message to be included in the email."),
+    'subject' => ts("Enter the subject line that should appear in the target email.")
   );
 
   $ret = '';
@@ -229,9 +257,10 @@ function petitionemail_get_template($object) {
 } 
 
 function petitionemail_civicrm_postProcess( $formName, &$form ) {
-  if ($formName != 'CRM_Campaign_Form_Petition') { return; }
+  if ($formName != 'CRM_Campaign_Form_Petition') { 
+    return; 
+  }
   if ( $form->_submitValues['email_petition'] == 1 ) {
-    require_once 'api/api.php';
     $survey_id = $form->getVar('_surveyId');
     $lastmoddate = 0;
     if (!$survey_id) {  // Ugly hack because the form doesn't return the id
@@ -239,7 +268,9 @@ function petitionemail_civicrm_postProcess( $formName, &$form ) {
       $surveys = civicrm_api("Survey", "get", $params);
       if (is_array($surveys['values'])) {
         foreach($surveys['values'] as $survey) {
-          if ($lastmoddate > strtotime($survey['last_modified_date'])) { continue; }
+          if ($lastmoddate > strtotime($survey['last_modified_date'])) { 
+            continue; 
+          }
           $lastmoddate = strtotime($survey['last_modified_date']);
           $survey_id = $survey['id'];
         }
@@ -250,53 +281,54 @@ function petitionemail_civicrm_postProcess( $formName, &$form ) {
       return;
     }
 
-    $recipient = $form->_submitValues['recipient']; 
-    $recipient_name = $form->_submitValues['recipient_name'];
     $default_message =  $form->_submitValues['default_message'];
     $user_message = intval($form->_submitValues['user_message']);
-    $subjectline = $form->_submitValues['subjectline'];
+    $subject = $form->_submitValues['subject'];
+    $recipients = $form->_submitValues['recipients'];
+    $group_id = $form->_submitValues['group_id'];
+    $location_type_id = $form->_submitValues['location_type_id'];
+    $matching_fields = $form->_submitValues['matching_fields'];
 
-    $checkexisting_sql ="SELECT COUNT(*) AS count 
-                           FROM civicrm_petition_email
-                          WHERE petition_id = %1";
-    $checkexisting_params = array( 1 => array( $survey_id, 'Integer' ) );
-    $checkexisting = CRM_Core_DAO::singleValueQuery( $checkexisting_sql, $checkexisting_params );
-
-    if ( $checkexisting == 0 ) {
-      $petitionemail_data_sql = "INSERT INTO civicrm_petition_email (
-                                             petition_id, 
-                                             recipient_email, 
-                                             recipient_name, 
+    $sql = "REPLACE INTO civicrm_petition_email (
+                                             petition_id,
                                              default_message, 
                                              message_field, 
-                                             subject
+                                             subject,
+                                             recipients,
+                                             group_id,
+                                             location_type_id
                                     ) VALUES ( 
                                              %1, 
                                              %2, 
                                              %3, 
-                                             %4, 
-                                             %5, 
-                                             %6 
+                                             %4,
+                                             %5,
+                                             %6,
+                                             %7
                                     )";
-    } else {
-      $petitionemail_data_sql = "UPDATE civicrm_petition_email
-                                    SET recipient_email = %2,
-                                        recipient_name = %3,
-                                        default_message = %4,
-                                        message_field = %5,
-                                        subject = %6
-                                  WHERE petition_id = %1";
+    $params = array( 
+      1 => array( $survey_id, 'Integer' ),
+      2 => array( $default_message, 'String' ),
+      3 => array( $user_message, 'String' ),
+      4 => array( $subject, 'String' ),
+      5 => array( $recipients, 'String' ),
+      6 => array( $group_id, 'Integer' ),
+      7 => array( $location_type_id, 'Integer' ),
+    );
+    $petitionemail = CRM_Core_DAO::executeQuery( $sql, $params );
+
+    // Now insert fields into fields table
+    reset($matching_fields);
+    // delete any existing ones
+    $sql = "DELETE FROM civicrm_petition_email_matching_field WHERE petition_id = %0";
+    $params = array(0 => array($survey_id, 'Integer'));
+    CRM_Core_DAO::executeQuery($sql, $params);
+    $sql = "INSERT INTO civicrm_petition_email_matching_field SET petition_id = %0, matching_field = %1";
+    $params = array(0 => array($survey_id, 'Integer'));
+    while(list(,$matching_field) = each($matching_fields)) {
+      $params[1] = array($matching_field, 'String');
+      CRM_Core_DAO::executeQuery($sql, $params);
     }
-
-    $petitionemail_data_params = array( 1 => array( $survey_id, 'Integer' ),
-                                        2 => array( $recipient, 'String' ),
-                                        3 => array( $recipient_name, 'String' ),
-                                        4 => array( $default_message, 'String' ),
-                                        5 => array( $user_message, 'String' ),
-                                        6 => array( $subjectline, 'String' ),
-                                       );
-
-    $petitionemail = CRM_Core_DAO::executeQuery( $petitionemail_data_sql, $petitionemail_data_params );
   }
 }
 
@@ -321,8 +353,6 @@ function petitionemail_civicrm_post( $op, $objectName, $objectId, &$objectRef ) 
       $survey_id = $objectRef->source_record_id;
       $activity_id = $objectRef->id;
       $petitionemail_get_sql = "SELECT petition_id, 
-                                       recipient_email, 
-                                       recipient_name, 
                                        default_message, 
                                        message_field, 
                                        subject 

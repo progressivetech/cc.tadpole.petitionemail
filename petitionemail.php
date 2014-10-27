@@ -129,25 +129,25 @@ function petitionemail_civicrm_buildForm( $formName, &$form ) {
       }
       $form->_defaultValues['matching_fields'] = $matching_fields;
     }
+
     $form->add('checkbox', 'email_petition', ts('Send an email to a target'));
-    $validcustomgroups = array();
 
     // Get the Profiles in use by this petition so we can find out
     // if there are any potential fields for an extra message to the
     // petition target.
-    $params = array('version' => '3', 
-                    'module' => 'CiviCampaign', 
+    $params = array('module' => 'CiviCampaign', 
                     'entity_table' => 'civicrm_survey', 
-                    'entity_id' => $survey_id );
-    $join_results = civicrm_api('UFJoin','get', $params);
+                    'entity_id' => $survey_id,
+                    'option.rowCount' => 0);
+    $join_results = civicrm_api3('UFJoin','get', $params);
     $custom_fields = array();
     if ($join_results['is_error'] == 0) {
       foreach ($join_results['values'] as $join_value) {
         $uf_group_id = $join_value['uf_group_id'];
 
         // Now get all fields in this profile
-        $params = array('version' => 3, 'uf_group_id' => $uf_group_id);
-        $field_results = civicrm_api('UFField', 'get', $params);
+        $params = array('uf_group_id' => $uf_group_id);
+        $field_results = civicrm_api3('UFField', 'get', $params);
         if ($field_results['is_error'] == 0) {
           foreach ($field_results['values'] as $field_value) {
             $field_name = $field_value['field_name'];
@@ -159,8 +159,8 @@ function petitionemail_civicrm_buildForm( $formName, &$form ) {
 
             $id = substr(strrchr($field_name, '_'), 1);
             // Finally, see if this is a text or textarea field.
-            $params = array('version' => 3, 'id' => $id);
-            $custom_results = civicrm_api('CustomField', 'get', $params);
+            $params = array('id' => $id);
+            $custom_results = civicrm_api3('CustomField', 'get', $params);
             if ($custom_results['is_error'] == 0) {
               $field_value = array_pop($custom_results['values']);
               $html_type = $field_value['html_type'];
@@ -212,8 +212,8 @@ function petitionemail_civicrm_postProcess( $formName, &$form ) {
     $survey_id = $form->getVar('_surveyId');
     $lastmoddate = 0;
     if (!$survey_id) {  // Ugly hack because the form doesn't return the id
-      $params = array('version' => '3', 'sequential' =>'1', 'title' =>$form->_submitValues['title']);
-      $surveys = civicrm_api("Survey", "get", $params);
+      $params = array('title' =>$form->_submitValues['title']);
+      $surveys = civicrm_api3("Survey", "get", $params);
       if (is_array($surveys['values'])) {
         foreach($surveys['values'] as $survey) {
           if ($lastmoddate > strtotime($survey['last_modified_date'])) { 
@@ -339,26 +339,12 @@ function petitionemail_civicrm_post( $op, $objectName, $objectId, &$objectRef ) 
           $petition_message = $petitionemail_get->default_message;
         }
         $to = $petitionemail_get->recipient_name . ' <' . $petitionemail_get->recipient_email . '>';
-        $activity = civicrm_api("Activity",
-                                "getsingle", 
-                                array ('version' => '3',
-                                       'sequential' =>'1', 
-                                       'id' =>$objectId)
-                               );
-        $from = civicrm_api("Contact",
-                            "getsingle", 
-                            array ('version' => '3',
-                                   'sequential' =>'1', 
-                                   'id' =>$activity['source_contact_id'])
-                           );
+        $activity = civicrm_api3("Activity", "getsingle", array ('id' =>$objectId));
+        $from = civicrm_api3("Contact", "getsingle", array ('id' =>$activity['source_contact_id']));
         if (array_key_exists('email', $from) && !empty($from['email'])) {
           $from = $from['display_name'] . ' <' . $from['email'] . '>';
         } else {
-          $domain = civicrm_api("Domain",
-                                "get", 
-                                array ('version' => '3',
-                                       'sequential' =>'1')
-                                );
+          $domain = civicrm_api3("Domain", "get", array ());
           if ($domain['is_error'] != 0 || !is_array($domain['values'])) { 
             // Can't send email without a from address.
             return; 
@@ -389,20 +375,9 @@ function petitionemail_civicrm_post( $op, $objectName, $objectId, &$objectRef ) 
  
 function petitionemail_get_petition_type() {
   require_once 'api/api.php';
-  $acttypegroup = civicrm_api("OptionGroup",
-                              "getsingle", 
-                              array('version' => '3',
-                                    'sequential' =>'1', 
-                                    'name' =>'activity_type')
-                             );
+  $acttypegroup = civicrm_api3("OptionGroup", "getsingle", array('name' =>'activity_type'));
   if ( $acttypegroup['id'] && !isset($acttypegroup['is_error']) ) {
-    $acttype = civicrm_api("OptionValue",
-                           "getsingle", 
-                           array ('version' => '3',
-                                  'sequential' => '1', 
-                                  'option_group_id' => $acttypegroup['id'], 
-                                  'name' =>'Petition')
-                          );
+    $acttype = civicrm_api3("OptionValue", "getsingle", array ('option_group_id' => $acttypegroup['id'], 'name' =>'Petition'));
     $petitiontype = $acttype['value'];
   }
     

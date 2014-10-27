@@ -6,9 +6,6 @@ require_once 'petitionemail.civix.php';
  * Implementation of hook_civicrm_config
  */
 function petitionemail_civicrm_config(&$config) {
-  // FIXME adding the javascript only on the alterForm or alterContent
-  // functions doesn't seem to work.
-  CRM_Core_Resources::singleton()->addScriptFile('cc.tadpole.petitionemail', 'petitionemail.js');
   _petitionemail_civix_civicrm_config($config);
 }
 
@@ -85,7 +82,6 @@ function petitionemail_civicrm_buildForm( $formName, &$form ) {
       $petitionemailval_params = array( 1 => array( $survey_id, 'Integer' ) );
       $petitionemailval = CRM_Core_DAO::executeQuery( $petitionemailval_sql, $petitionemailval_params );
       while ($petitionemailval->fetch()) {
- 
         $defaults = $form->getVar('_defaults');
         $messagefield = 'custom_' . $petitionemailval->message_field;
         foreach ($form->_elements as $element) {
@@ -100,6 +96,7 @@ function petitionemail_civicrm_buildForm( $formName, &$form ) {
   }
 
   if ($formName == 'CRM_Campaign_Form_Petition') {
+    CRM_Core_Resources::singleton()->addScriptFile('cc.tadpole.petitionemail', 'petitionemail.js');
     $survey_id = $form->getVar('_surveyId');
     if ($survey_id) {
       $sql = "SELECT petition_id, 
@@ -206,55 +203,6 @@ function petitionemail_civicrm_buildForm( $formName, &$form ) {
     $form->add('text', 'subject', ts('Email Subject Line'));
   }
 }
-
-function petitionemail_civicrm_alterContent(  &$content, $context, $tplName, &$object ) {
-  if ($tplName == 'CRM/Campaign/Form/Petition.tpl') {
-    $ret = '';
-    $action = $object->getVar('_action');
-    if ($action == 8) { return; }
-
-    //insert the field before is_active
-    $insertpoint = strpos($content, '<tr class="crm-campaign-survey-form-block-is_active">');
-
-    $ret .= substr($content, 0, $insertpoint);
-    $ret .= petitionemail_get_template($object);
-    $ret .= substr($content, $insertpoint);
-    $content = $ret;
-  }
-}
-
-function petitionemail_get_template($object) {
-  $rendererval = $object->getVar('_renderer');
-  // Identify the fields to display (keys) with the descriptions that 
-  // should display with them (values)
-  $fields = array(
-    'group_id' => ts("Select the group containing the contacst that you want to receive the petition."),
-    'matching_fields' => ts("If the user and the target have the same value for this field, then the user's petition will be sent to the matching target."),
-    'location_type_id' => ts("A target contact can have more than one email address. Choose the email location that should be used when sending the petition."),
-    'email_petition' => ts("Should signatures generate an email to the petition's  target?"),
-    'recipients' => ts("Enter additional targets that receive copies of all petitions in the form: 'First name Last name' &lt;email@example.org&gt;. Separate multiple recipients with line breaks."),
-    'user_message' => ts("Select a field that will have the signer's custom message.  Make sure it is included in the Activity Profile you selected."),
-    'default_message' => ts("Enter the default message to be included in the email."),
-    'subject' => ts("Enter the subject line that should appear in the target email.")
-  );
-
-  $ret = '';
-  reset($rendererval->_tpl->_tpl_vars['form']);
-  while(list($k, $v) = each($rendererval->_tpl->_tpl_vars['form'])) {
-    if(array_key_exists($k, $fields)) {
-      $label = $v['label'];
-      $html = $v['html'];
-      $description = $fields[$k];
-      $ret .= ' 
-        <tr class="crm-campaign-survey-form-block-' . $k . '">
-          <td class="label">' . $label . '</td>
-          <td>' .  $html . '<div class="description">' . $description . '</div>
-          </td>
-        </tr>';
-    }
-  }
-  return $ret;
-} 
 
 function petitionemail_civicrm_postProcess( $formName, &$form ) {
   if ($formName != 'CRM_Campaign_Form_Petition') { 

@@ -151,7 +151,7 @@ function petitionemail_civicrm_buildForm( $formName, &$form ) {
         $profile_ids[] = $join_value['uf_group_id'];
       }
     }
-    $custom_fields = petition_email_get_textarea_fields($profile_ids);
+    $custom_fields = petitionemail_get_textarea_fields($profile_ids);
     
     $custom_message_field_options = array();
     if(count($custom_fields) == 0) {
@@ -233,7 +233,7 @@ function petitionemail_civicrm_validateForm($formName, &$fields, &$files, &$form
 /**
  * Given an array of profile ids, list all text area fields
  */
-function petition_email_get_textarea_fields($profile_ids) {
+function petitionemail_get_textarea_fields($profile_ids) {
   // Now get all fields in this profile
   $custom_fields = array();
   while(list(,$uf_group_id) = each($profile_ids)) {
@@ -373,14 +373,13 @@ function petitionemail_civicrm_post( $op, $objectName, $objectId, &$objectRef ) 
     if ($objectRef->activity_type_id == $petition_type_id) {
       $survey_id = $objectRef->source_record_id;
       $activity_id = $objectRef->id;
-      petition_email_process_signature($survey_id, $activity_id, $profile_fields);
+      petitionemail_process_signature($survey_id, $activity_id, $profile_fields);
     }
   }
 }
 
-function petition_email_process_signature($survey_id, $activity_id, $profile_fields = NULL) {
-  $sql = "SELECT petition_id, 
-               default_message, 
+function petitionemail_process_signature($survey_id, $activity_id, $profile_fields = NULL) {
+  $sql = "SELECT default_message, 
                message_field, 
                subject,
                group_id,
@@ -391,13 +390,14 @@ function petition_email_process_signature($survey_id, $activity_id, $profile_fie
   $params = array( 1 => array( $survey_id, 'Integer' ) );
   $petition_email = CRM_Core_DAO::executeQuery( $sql, $params );
   $petition_email->fetch();
-  if($petition_email->petition_id == NULL) {
+  if($petition_email->N == 0) {
     // Must not be a petition with a target.
     return;
   }
 
   // Store variables we need
-  $petition_id = $petition_email->id;
+  // Petition id and survey id are the same.
+  $petition_id = $survey_id;
   $default_message = $petition_email->default_message;
   $subject = $petition_email->subject;
   $group_id = $petition_email->group_id;
@@ -408,6 +408,7 @@ function petition_email_process_signature($survey_id, $activity_id, $profile_fie
   // Now retrieve the matching fields, if any
   $sql = "SELECT matching_field FROM civicrm_petition_email_matching_field
     WHERE petition_id = %1";
+  $params = array( 1 => array( $survey_id, 'Integer' ) );
   $dao = CRM_Core_DAO::executeQuery($sql, $params);
   $matching_fields = array();
   while($dao->fetch()) {
@@ -481,6 +482,7 @@ function petition_email_process_signature($survey_id, $activity_id, $profile_fie
     if(!empty($recipient['email'])) {
       $email_params['toName'] = $recipient['name'];
       $email_params['toEmail'] = $recipient['email'];
+      $to = $email_params['toName'] . $email_params['toEmail'];
       $success = CRM_Utils_Mail::send($email_params);
 
       if($success == 1) {

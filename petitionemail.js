@@ -9,7 +9,7 @@ cj(document).ready( function() {
 function checkProfileIncludesMessage() {
   cj("#profileMissingMessage").remove();
   var actProfile = cj("#profile_id").val();
-  cj().crmAPI("UFField","get",{ "sequential" :"1", "uf_group_id" : actProfile },{ success:function (data){    
+  cj().crmAPI("UFField","get",{ "sequential" :"1", "uf_group_id" : actProfile },{ success:function (data){
     var msgField = cj("#user_message").val();
     if (msgField) {
       var fieldinfo = cj.inArray(msgField, data["values"])
@@ -30,17 +30,13 @@ function checkProfileIncludesMessage() {
 function showHideEmailPetition() {
   if( cj("input#email_petition").attr("checked") ) {
     cj("tr.crm-campaign-survey-form-block-location_type_id").show("fast");
-    cj("tr.crm-campaign-survey-form-block-group_id").show("fast");
-    cj("tr.crm-campaign-survey-form-block-matching_fields").show("fast");
-    cj("tr.crm-campaign-survey-form-block-recipients").show("fast");
+    cj("tr.crm-campaign-survey-form-block-recipient_options").show("fast");
     cj("tr.crm-campaign-survey-form-block-user_message").show("fast");
     cj("tr.crm-campaign-survey-form-block-default_message").show("fast");
     cj("tr.crm-campaign-survey-form-block-subject").show("fast");
   } else {
     cj("tr.crm-campaign-survey-form-block-location_type_id").hide("fast");
-    cj("tr.crm-campaign-survey-form-block-group_id").hide("fast");
-    cj("tr.crm-campaign-survey-form-block-matching_fields").hide("fast");
-    cj("tr.crm-campaign-survey-form-block-recipients").hide("fast");
+    cj("tr.crm-campaign-survey-form-block-recipient_options").hide("fast");
     cj("tr.crm-campaign-survey-form-block-user_message").hide("fast");
     cj("tr.crm-campaign-survey-form-block-default_message").hide("fast");
     cj("tr.crm-campaign-survey-form-block-subject").hide("fast");

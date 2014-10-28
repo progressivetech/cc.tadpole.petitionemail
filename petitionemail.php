@@ -96,6 +96,7 @@ function petitionemail_civicrm_buildForm( $formName, &$form ) {
     CRM_Core_Resources::singleton()->addScriptFile('cc.tadpole.petitionemail', 'petitionemail.js');
     $survey_id = $form->getVar('_surveyId');
     if ($survey_id) {
+      // Set default values for saved petitions.
       $sql = "SELECT petition_id, 
                 default_message, 
                 message_field, 
@@ -108,27 +109,31 @@ function petitionemail_civicrm_buildForm( $formName, &$form ) {
       $params = array( 1 => array( $survey_id, 'Integer' ) );
       $dao = CRM_Core_DAO::executeQuery( $sql, $params );
       $dao->fetch();
-      $defaults['email_petition'] = 1;
-      $defaults['recipients'] = $dao->recipients;
-      $defaults['default_message'] = $dao->default_message;
-      $defaults['user_message'] = $dao->message_field;
-      $defaults['subject'] = $dao->subject;
-      $defaults['location_type_id'] = $dao->location_type_id;
-      $defaults['group_id'] = $dao->group_id;
-      
-      $form->setDefaults($defaults);
+      if($dao->N > 0) {
+        // Base table values.
+        $defaults['email_petition'] = 1;
+        $defaults['recipients'] = $dao->recipients;
+        $defaults['default_message'] = $dao->default_message;
+        $defaults['user_message'] = $dao->message_field;
+        $defaults['subject'] = $dao->subject;
+        $defaults['location_type_id'] = $dao->location_type_id;
+        $defaults['group_id'] = $dao->group_id;
+        
+        // Now get matching fields.
+        $sql = "SELECT matching_field FROM civicrm_petition_email_matching_field
+          WHERE petition_id = %1";
+        $dao = CRM_Core_DAO::executeQuery($sql, $params);
+        $matching_fields = array();
+        while($dao->fetch()) {
+          $matching_fields[] = $dao->matching_field;
+        }
+        $defaults['matching_fields'] = $matching_fields;
 
-      // Now get matching fields
-      $sql = "SELECT matching_field FROM civicrm_petition_email_matching_field
-        WHERE petition_id = %1";
-      $dao = CRM_Core_DAO::executeQuery($sql, $params);
-      $matching_fields = array();
-      while($dao->fetch()) {
-        $matching_fields[] = $dao->matching_field;
+        $form->setDefaults($defaults);
       }
-      $form->_defaultValues['matching_fields'] = $matching_fields;
     }
 
+    // Now add our extra fields to the form.
     $form->add('checkbox', 'email_petition', ts('Send an email to a target'));
 
     // Get the Profiles in use by this petition so we can find out
@@ -147,7 +152,6 @@ function petitionemail_civicrm_buildForm( $formName, &$form ) {
       }
     }
     $custom_fields = petition_email_get_textarea_fields($profile_ids);
-
     
     $custom_message_field_options = array();
     if(count($custom_fields) == 0) {
@@ -181,6 +185,48 @@ function petitionemail_civicrm_buildForm( $formName, &$form ) {
       $custom_message_field_options);
     $form->add('textarea', 'default_message', ts('Default Message'));
     $form->add('text', 'subject', ts('Email Subject Line'));
+  }
+}
+
+/**
+ * Validate the petition form
+ *
+ * Ensure our values are consistent to avoid broken petitions.
+ */
+function petitionemail_civicrm_validateForm($formName, &$fields, &$files, &$form, &$errors) {
+  if($formName == 'CRM_Campaign_Form_Petition') {
+    if(CRM_Utils_Array::value('email_petition', $fields)) {
+      // If group_id is provided, make sure we also have location_type_id and at least one
+      // matching field.
+      $group_id = CRM_Utils_Array::value('group_id', $fields);
+      $location_type_id = CRM_Utils_Array::value('location_type_id', $fields);
+      $matching_fields = CRM_Utils_Array::value('matching_fields', $fields);
+
+      if(!empty($group_id)) {
+        if(empty($location_type_id) || empty($matching_fields)) {
+          $msg = ts("If you select a matching target group you must select
+            both the email type and at least one matching field.");
+          $errors['group_id'] = $msg; 
+        }
+      }
+      // If additional email targets have been provided, make sure they are
+      // all syntactically correct.
+      $recipients = CRM_Utils_Array::value('recipients', $fields);
+      if(!empty($recipients)) {
+        $recipient_array = explode("\n", $recipients);
+        while(list(,$line) = each($recipient_array)) {
+          if(FALSE === petitionemail_parse_email_line($line)) {
+            $errors['recipients'] = ts("Invalid email address listed: %1.", array(1 => $line));
+          }
+        }
+      }
+
+      if(empty($group_id) && empty($recipients)) {
+        $msg = ts("You must select either a target matching group or list
+          at least one address to send all petitions to.");
+        $errors['recipients'] = $msg;
+      }
+    }
   }
 }
 

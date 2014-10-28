@@ -84,17 +84,11 @@ function petitionemail_civicrm_buildForm( $formName, &$form ) {
              WHERE petition_id = %1";
       $params = array( 1 => array( $survey_id, 'Integer' ) );
       $dao = CRM_Core_DAO::executeQuery( $sql, $params );
-      while ($dao->fetch()) {
-        $defaults = $form->getVar('_defaults');
-        $messagefield = 'custom_' . $dao->message_field;
-        foreach ($form->_elements as $element) {
-          if ($element->_attributes['name'] == $messagefield) { 
-            $element->_value = $dao->default_message; 
-          }
-        }
-        $defaults[$messagefield] = $form->_defaultValues[$messagefield] = $dao->default_message;
-        $form->setVar('_defaults',$defaults);
-      }
+      $defaults = array();
+      $dao->fetch();
+      $message_field = 'custom_' . $dao->message_field;
+      $defaults[$message_field] = $dao->default_message;
+      $form->setDefaults($defaults);
     }
   }
 
@@ -113,15 +107,17 @@ function petitionemail_civicrm_buildForm( $formName, &$form ) {
               WHERE petition_id = %1";
       $params = array( 1 => array( $survey_id, 'Integer' ) );
       $dao = CRM_Core_DAO::executeQuery( $sql, $params );
-      while ($dao->fetch()) {
-        $form->_defaultValues['email_petition'] = 1;
-        $form->_defaultValues['recipients'] = $dao->recipients;
-        $form->_defaultValues['default_message'] = $dao->default_message;
-        $form->_defaultValues['user_message'] = $dao->message_field;
-        $form->_defaultValues['subject'] = $dao->subject;
-        $form->_defaultValues['location_type_id'] = $dao->location_type_id;
-        $form->_defaultValues['group_id'] = $dao->group_id;
-      }
+      $dao->fetch();
+      $defaults['email_petition'] = 1;
+      $defaults['recipients'] = $dao->recipients;
+      $defaults['default_message'] = $dao->default_message;
+      $defaults['user_message'] = $dao->message_field;
+      $defaults['subject'] = $dao->subject;
+      $defaults['location_type_id'] = $dao->location_type_id;
+      $defaults['group_id'] = $dao->group_id;
+      
+      $form->setDefaults($defaults);
+
       // Now get matching fields
       $sql = "SELECT matching_field FROM civicrm_petition_email_matching_field
         WHERE petition_id = %1";
@@ -141,42 +137,18 @@ function petitionemail_civicrm_buildForm( $formName, &$form ) {
     $params = array('module' => 'CiviCampaign', 
                     'entity_table' => 'civicrm_survey', 
                     'entity_id' => $survey_id,
-                    'option.rowCount' => 0);
+                    'rowCount' => 0);
     $join_results = civicrm_api3('UFJoin','get', $params);
     $custom_fields = array();
+    $profile_ids = array();
     if ($join_results['is_error'] == 0) {
       foreach ($join_results['values'] as $join_value) {
-        $uf_group_id = $join_value['uf_group_id'];
-
-        // Now get all fields in this profile
-        $params = array('uf_group_id' => $uf_group_id);
-        $field_results = civicrm_api3('UFField', 'get', $params);
-        if ($field_results['is_error'] == 0) {
-          foreach ($field_results['values'] as $field_value) {
-            $field_name = $field_value['field_name'];
-            if(!preg_match('/^custom_[0-9]+/', $field_name)) {
-              // We only know how to lookup field types for custom
-              // fields. Skip core fields.
-              continue;
-            }
-
-            $id = substr(strrchr($field_name, '_'), 1);
-            // Finally, see if this is a text or textarea field.
-            $params = array('id' => $id);
-            $custom_results = civicrm_api3('CustomField', 'get', $params);
-            if ($custom_results['is_error'] == 0) {
-              $field_value = array_pop($custom_results['values']);
-              $html_type = $field_value['html_type'];
-              $label = $field_value['label'];
-              $id = $field_value['id'];
-              if($html_type == 'Text' || $html_type == 'TextArea') {
-                $custom_fields[$id] = $label;
-              }
-            }
-          }
-        }
+        $profile_ids[] = $join_value['uf_group_id'];
       }
     }
+    $custom_fields = petition_email_get_textarea_fields($profile_ids);
+
+    
     $custom_message_field_options = array();
     if(count($custom_fields) == 0) {
       $custom_message_field_options = array(
@@ -211,6 +183,44 @@ function petitionemail_civicrm_buildForm( $formName, &$form ) {
     $form->add('text', 'subject', ts('Email Subject Line'));
   }
 }
+
+/**
+ * Given an array of profile ids, list all text area fields
+ */
+function petition_email_get_textarea_fields($profile_ids) {
+  // Now get all fields in this profile
+  $custom_fields = array();
+  while(list(,$uf_group_id) = each($profile_ids)) {
+    $params = array('uf_group_id' => $uf_group_id, 'rowCount' => 0);
+    $field_results = civicrm_api3('UFField', 'get', $params);
+    if ($field_results['is_error'] == 0) {
+      foreach ($field_results['values'] as $field_value) {
+        $field_name = $field_value['field_name'];
+        if(!preg_match('/^custom_[0-9]+/', $field_name)) {
+          // We only know how to lookup field types for custom
+          // fields. Skip core fields.
+          continue;
+        }
+
+        $id = substr(strrchr($field_name, '_'), 1);
+        // Finally, see if this is a text or textarea field.
+        $params = array('id' => $id);
+        $custom_results = civicrm_api3('CustomField', 'get', $params);
+        if ($custom_results['is_error'] == 0) {
+          $field_value = array_pop($custom_results['values']);
+          $html_type = $field_value['html_type'];
+          $label = $field_value['label'];
+          $id = $field_value['id'];
+          if($html_type == 'Text' || $html_type == 'TextArea') {
+            $custom_fields[$id] = $label;
+          }
+        }
+      }
+    }
+  }
+  return $custom_fields;
+}
+
 
 function petitionemail_civicrm_postProcess( $formName, &$form ) {
   if ($formName != 'CRM_Campaign_Form_Petition') { 

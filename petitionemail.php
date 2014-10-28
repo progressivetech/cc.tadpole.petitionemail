@@ -280,104 +280,276 @@ function petitionemail_civicrm_postProcess( $formName, &$form ) {
   }
 }
 
+/**
+ * Implementation of hook_civicrm_post
+ *
+ * Run everytime a post is made to see if it's a new profile/activity
+ * that should trigger a petition email to be sent.
+ */
 function petitionemail_civicrm_post( $op, $objectName, $objectId, &$objectRef ) {
+  // This function is called twice with a petition, once with the profile
+  // (first) and then again for the activity. We have to save the profile
+  // fields when it is called and then use them when the activity comes around.
   static $profile_fields = NULL;
   if($objectName == 'Profile' && is_array($objectRef)) {
-    // This seems like broad criteria to be hanging on to a static array, however,
-    // not sure how else to capture the input to be used in case this is a petition
-    // being signed that has a target. If you are anonymous, you have a source field in the
-    // array, but that is not there if you are logged in. Sigh.
+    // This seems like broad criteria to be hanging on to a static array,
+    // however, not sure how else to capture the input to be used in case
+    // this is a petition being signed that has a target. If you are anonymous,
+    // you have a source field in the array, but that is not there if you
+    // are logged in. Sigh.
       $profile_fields = $objectRef;
   }
 
   if ($op == 'create' && $objectName == 'Activity') {
-    require_once 'api/api.php';
-
-    //Check what the Petition Activity id is
-    $petitiontype = petitionemail_get_petition_type();
-
-    //Only proceed if the Petition Activity is being created
-    if ($objectRef->activity_type_id == $petitiontype) {
+    //Check what the Petition Activity id is.
+    $petition_type_id = petitionemail_get_petition_type();
+    if ($objectRef->activity_type_id == $petition_type_id) {
       $survey_id = $objectRef->source_record_id;
       $activity_id = $objectRef->id;
-      $petitionemail_get_sql = "SELECT petition_id, 
-                                       default_message, 
-                                       message_field, 
-                                       subject 
-                                  FROM civicrm_petition_email 
-                                 WHERE petition_id = %1";
-      $petitionemail_get_params = array( 1 => array( $survey_id, 'Integer' ) );
-      $petitionemail_get = CRM_Core_DAO::executeQuery( $petitionemail_get_sql, $petitionemail_get_params );
-      while ($petitionemail_get->fetch() ) {
-        if($petitionemail_get->petition_id == NULL) {
-          // Must not be a petition with a target.
-          return;
-        }
+      petition_email_process_signature($survey_id, $activity_id, $profile_fields);
+    }
+  }
+}
 
-        // Set up variables for the email message
-        // Figure out whether to use the user-supplied message or the default message
-        $petition_message = NULL;
-        // If the petition has specified a message field, and we've encountered the profile post action....
-        if(!empty($petitionemail_get->message_field) && !is_null($profile_fields)) {
-          if(is_numeric($petitionemail_get->message_field)) {
-            $message_field = 'custom_' . $petitionemail_get->message_field;
-          }
-          else {
-            $message_field = $petitionemail_get->message_field;
-          }
-          // If the field is in the profile
-          if(array_key_exists($message_field, $profile_fields)) {
-            // If it's not empty...
-            if(!empty($profile_fields[$message_field])) {
-              $petition_message = $profile_fields[$message_field];
-            }
-          }
-        } 
+function petition_email_process_signature($survey_id, $activity_id, $profile_fields = NULL) {
+  $sql = "SELECT petition_id, 
+               default_message, 
+               message_field, 
+               subject,
+               group_id,
+               location_type_id,
+               recipients
+         FROM civicrm_petition_email
+         WHERE petition_id = %1 GROUP BY petition_id";
+  $params = array( 1 => array( $survey_id, 'Integer' ) );
+  $petition_email = CRM_Core_DAO::executeQuery( $sql, $params );
+  $petition_email->fetch();
+  if($petition_email->petition_id == NULL) {
+    // Must not be a petition with a target.
+    return;
+  }
 
-        // No user supplied message, use the default
-        if(is_null($petition_message)) {
-          $petition_message = $petitionemail_get->default_message;
-        }
-        $to = $petitionemail_get->recipient_name . ' <' . $petitionemail_get->recipient_email . '>';
-        $activity = civicrm_api3("Activity", "getsingle", array ('id' =>$objectId));
-        $from = civicrm_api3("Contact", "getsingle", array ('id' =>$activity['source_contact_id']));
-        if (array_key_exists('email', $from) && !empty($from['email'])) {
-          $from = $from['display_name'] . ' <' . $from['email'] . '>';
-        } else {
-          $domain = civicrm_api3("Domain", "get", array ());
-          if ($domain['is_error'] != 0 || !is_array($domain['values'])) { 
-            // Can't send email without a from address.
-            return; 
-          }
-          $from = '"' . $from['display_name'] . '"' . ' <' . $domain['values']['from_email'] . '>';
-        }
+  // Store variables we need
+  $petition_id = $petition_email->id;
+  $default_message = $petition_email->default_message;
+  $subject = $petition_email->subject;
+  $group_id = $petition_email->group_id;
+  $location_type_id = $petition_email->location_type_id;
+  $message_field = $petition_email->message_field;
+  $recipients = $petition_email->recipients;
 
-        // Setup email message
-        $email_params = array( 
-          'from'    => $from,
-          'toName'  => $petitionemail_get->recipient_name,
-          'toEmail' => $petitionemail_get->recipient_email,
-          'subject' => $petitionemail_get->subject,
-          'text'    => $petition_message, 
-          'html'    => $petition_message
-        );
-        $success = CRM_Utils_Mail::send($email_params);
+  // Now retrieve the matching fields, if any
+  $sql = "SELECT matching_field FROM civicrm_petition_email_matching_field
+    WHERE petition_id = %1";
+  $dao = CRM_Core_DAO::executeQuery($sql, $params);
+  $matching_fields = array();
+  while($dao->fetch()) {
+    // Key the array to the custom id number and leave the value blank.
+    // The value will be populated below with the value from the petition
+    // signer.
+    $key = 'custom_' . $dao->matching_field;
+    $matching_fields[$key] = NULL;
+  }
 
-        if($success == 1) {
-          CRM_Core_Session::setStatus( ts('Message sent successfully to') . " $to" );
-        } else {
-          CRM_Core_Session::setStatus( ts('Error sending message to') . " $to" );
-        }
+  // Figure out whether to use the user-supplied message or the default
+  // message.
+  $petition_message = NULL;
+  // If the petition has specified a message field, and we've encountered
+  // the profile post action....
+  if(!empty($message_field) && !is_null($profile_fields)) {
+    if(is_numeric($message_field)) {
+      $message_field = 'custom_' . $message_field;
+    }
+    
+    // If the field is in the profile
+    if(array_key_exists($message_field, $profile_fields)) {
+      // If it's not empty...
+      if(!empty($profile_fields[$message_field])) {
+        $petition_message = $profile_fields[$message_field];
+      }
+    }
+  } 
+
+  // No user supplied message, use the default
+  if(is_null($petition_message)) {
+    $petition_message = $default_message;
+  }
+  $activity = civicrm_api3("Activity", "getsingle", array ('id' => $activity_id));
+  $contact_id = $activity['source_contact_id'];
+  $from = civicrm_api3("Contact", "getsingle", array ('id' => $contact_id));
+
+  if (array_key_exists('email', $from) && !empty($from['email'])) {
+    $from = $from['display_name'] . ' <' . $from['email'] . '>';
+  } else {
+    $domain = civicrm_api3("Domain", "get", array ());
+    if ($domain['is_error'] != 0 || !is_array($domain['values'])) { 
+      // Can't send email without a from address.
+      $msg = ts("Failed to send petition email because from address not sent.");
+      CRM_Core_Error::debug_log_message($msg);
+      return; 
+    }
+    $from = '"' . $from['display_name'] . '"' . ' <' .
+      $domain['values']['from_email'] . '>';
+  }
+
+  // Setup email message (except to address)
+  $email_params = array( 
+    'from'    => $from,
+    'toName'  => NULL,
+    'toEmail' => NULL,
+    'subject' => $petition_email->subject,
+    'text'    => $petition_message, 
+    'html'    => $petition_message
+  );
+
+  // Get array of recipients
+  $petition_vars = array(
+    'recipients' => $recipients,
+    'group_id' => $group_id,
+    'matching_fields' => $matching_fields,
+    'location_type_id' => $location_type_id
+  );
+  $recipients = petitionemail_get_recipients($contact_id, $petition_vars);
+  while(list(, $recipient) = each($recipients)) {
+    if(!empty($recipient['email'])) {
+      $email_params['toName'] = $recipient['name'];
+      $email_params['toEmail'] = $recipient['email'];
+      $success = CRM_Utils_Mail::send($email_params);
+
+      if($success == 1) {
+        CRM_Core_Session::setStatus( ts('Message sent successfully to') . " $to" );
+      } else {
+        CRM_Core_Session::setStatus( ts('Error sending message to') . " $to" );
       }
     }
   }
 }
  
+function petitionemail_get_recipients($contact_id, $petition_vars) {
+  $ret = array();
+  // First, parse the additional recipients, if any. These get the email
+  // regarldess of who signs it.
+  if(!empty($petition_vars['recipients'])) {
+    $recipients = explode("\n", $petition_vars['recipients']);
+    while(list(,$recipient) = each($recipients)) {
+      $email_parts = petitionemail_parse_email_line($recipient); 
+      if(FALSE !== $email_parts) {
+        $ret[] = array(
+          'name' => $email_parts['name'],
+          'email' => $email_parts['email']
+        );
+      }
+    }
+  }
+  // If there is a contact group, we do a complex query to figure out
+  // which members of the group should be included as recipients.
+  if(!empty($petition_vars['group_id'])) {
+    // Get the values of the matching fields for the contact. These values
+    // are used to match the contact who signed the petition with the 
+    // contact or contacts in the target group.
+    $matching_fields = $petition_vars['matching_fields'];
+    $field_names = array_keys($matching_fields);
+    $contact_params = array('return' => $field_names, 'id' => $contact_id);
+    $contact = civicrm_api3('Contact', 'getsingle', $contact_params);
+    while(list($matching_field) = each($matching_fields)) {
+      $matching_fields[$matching_field] = $contact[$matching_field];
+    } 
+
+    $from = array();
+    $where = array();
+    $params = array();
+
+    $group_id = $petition_vars['group_id'];
+    // Retrieve details (specifically, find out if it's a smart group)
+    $results = civicrm_api3('Group', 'getsingle', array('id' => $group_id));
+    if(!empty($results['id'])) {
+      if(!empty($results['saved_search_id'])) {
+        // Populate the cache
+        CRM_Contact_BAO_GroupContactCache::check($group_id);
+        $from [] = 'civicrm_contact c JOIN civicrm_group_contact_cache cc ON
+          c.id = cc.contact_id';
+        $where[] = 'cc.group_id = %0';
+        $params[0] = array($group_id, 'Integer');
+      }
+      else {
+        $from[] = 'civicrm_contact c JOIN civicrm_group_contact gc ON
+          c.id = gc.contact_id';
+        $where[] = 'gc.group_id = %0';
+        $where[] = 'gc.status = "Added"';
+        $params[0] = array($group_id, 'Integer');
+      }
+    }
+
+    // Now we gather information on the custom fields at play
+    reset($matching_fields);
+    $id = 1;
+    while(list($matching_field, $value) = each($matching_fields)) {
+      $sql = "SELECT column_name, table_name FROM civicrm_custom_group g 
+        JOIN civicrm_custom_field f ON g.id = f.custom_group_id WHERE 
+        f.id = %0";
+      $custom_field_id = str_replace('custom_', '', $matching_field);
+      $dao = CRM_Core_DAO::executeQuery($sql, array(0 => array($custom_field_id, 'Integer')));
+      $dao->fetch();
+      $from[] = "JOIN " . $dao->table_name . " ON " . $dao->table_name . ".entity_id = 
+        c.id";
+      $where[] = $dao->column_name . ' = %' . $id;
+      // Fixme - we should use the proper data type for each custom field
+      $params[$id] = array($value, 'String');
+      $id++;
+    }
+
+    // Now add the right email lookup info
+    $from[] = "JOIN civicrm_email e ON c.id = e.contact_id";
+    $where[] = 'e.location_type_id = %' . $id;
+    $params[$id] = array($petition_vars['location_type_id'], 'Integer');
+
+    // put it all together
+    $sql = "SELECT c.display_name, e.email FROM ";
+    $sql .= implode("\n", $from);
+    $sql .= " WHERE " . implode(" AND\n", $where);
+
+    $dao = CRM_Core_DAO::executeQuery($sql, $params);
+
+    while($dao->fetch()) {
+      $ret[] = array(
+        'name' => $dao->display_name,
+        'email' => $dao->email
+      );
+    }
+  }
+  return $ret; 
+}
+
+/**
+ * Convert name + email line into name and email parts
+ *
+ * Thanks: http://www.regular-expressions.info/email.html
+ */
+function petitionemail_parse_email_line($line) {
+  $ret = array();
+  $recipient = trim($line);
+  // First attempt to extract a valid email address
+  if(preg_match('/([A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,6})/i', $recipient, $matches)) {
+    $email = $matches[1];
+    // Now remove the matching email from the string, along with any <> characters
+    $remainder = trim(str_replace(array($email, '>', '<'), '', $recipient)); 
+    // Trim off any opening/closing quotes
+    $name = trim($remainder, '"');
+    $ret['name'] = $name;
+    $ret['email'] = $email;
+  }
+  else {
+    // Could not find an email address in there any where.
+    $ret = FALSE;
+  }
+  return $ret;
+}
+
 function petitionemail_get_petition_type() {
-  require_once 'api/api.php';
   $acttypegroup = civicrm_api3("OptionGroup", "getsingle", array('name' =>'activity_type'));
   if ( $acttypegroup['id'] && !isset($acttypegroup['is_error']) ) {
-    $acttype = civicrm_api3("OptionValue", "getsingle", array ('option_group_id' => $acttypegroup['id'], 'name' =>'Petition'));
+    $params = array ('option_group_id' => $acttypegroup['id'], 'name' =>'Petition');
+    $acttype = civicrm_api3("OptionValue", "getsingle", $params);
     $petitiontype = $acttype['value'];
   }
     

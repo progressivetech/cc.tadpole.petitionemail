@@ -169,7 +169,8 @@ function petitionemail_civicrm_buildForm( $formName, &$form ) {
       CRM_Core_PseudoConstant::get('CRM_Core_DAO_Address', 'location_type_id');
     $sql = "SELECT f.id, g.title, f.label FROM civicrm_custom_group g JOIN
       civicrm_custom_field f ON g.id = f.custom_group_id
-      WHERE g.is_active = 1 AND f.is_active = 1 ORDER BY g.title, f.label";
+      WHERE g.is_active = 1 AND f.is_active = 1 AND extends = 'Individual' 
+      ORDER BY g.title, f.label";
     $dao = CRM_Core_DAO::executeQuery($sql);
     $field_options = array();
     while($dao->fetch()) {

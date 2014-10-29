@@ -458,7 +458,8 @@ function petitionemail_process_signature($activity_id) {
     $domain = civicrm_api3("Domain", "get", array ());
     if ($domain['is_error'] != 0 || !is_array($domain['values'])) { 
       // Can't send email without a from address.
-      $msg = ts("Failed to send petition email because from address not sent.");
+      $msg = "petition_email: Failed to send petition email because from
+        address not sent.";
       CRM_Core_Error::debug_log_message($msg);
       return; 
     }
@@ -489,6 +490,10 @@ function petitionemail_process_signature($activity_id) {
       $email_params['toName'] = $recipient['name'];
       $email_params['toEmail'] = $recipient['email'];
       $to = $email_params['toName'] . ' ' . $email_params['toEmail'];
+
+      $msg = "petition_email: '$contact_id' sending petition to '$to'";
+      CRM_Core_Error::debug_log_message($msg);
+
       $success = CRM_Utils_Mail::send($email_params);
 
       if($success == 1) {

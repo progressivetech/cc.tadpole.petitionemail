@@ -354,31 +354,39 @@ function petitionemail_civicrm_postProcess( $formName, &$form ) {
  * that should trigger a petition email to be sent.
  */
 function petitionemail_civicrm_post( $op, $objectName, $objectId, &$objectRef ) {
-  // This function is called twice with a petition, once with the profile
-  // (first) and then again for the activity. We have to save the profile
-  // fields when it is called and then use them when the activity comes around.
-  static $profile_fields = NULL;
-  if($objectName == 'Profile' && is_array($objectRef)) {
-    // This seems like broad criteria to be hanging on to a static array,
-    // however, not sure how else to capture the input to be used in case
-    // this is a petition being signed that has a target. If you are anonymous,
-    // you have a source field in the array, but that is not there if you
-    // are logged in. Sigh.
-      $profile_fields = $objectRef;
-  }
+  if ($objectName == 'Activity') {
+    $activity_id = $objectId;
 
-  if ($op == 'create' && $objectName == 'Activity') {
-    //Check what the Petition Activity id is.
-    $petition_type_id = petitionemail_get_petition_type();
-    if ($objectRef->activity_type_id == $petition_type_id) {
-      $survey_id = $objectRef->source_record_id;
-      $activity_id = $objectRef->id;
-      petitionemail_process_signature($survey_id, $activity_id, $profile_fields);
+    // Only run on creation. For petition that require a confirmation,
+    // after the petition has been created, see petitionemail_civicrm_pageRun().
+    if($op == 'create') {
+      if(petitionemail_is_actionable_activity($activity_id)) {
+        petitionemail_process_signature($activity_id);
+      }
     }
   }
 }
 
-function petitionemail_process_signature($survey_id, $activity_id, $profile_fields = NULL) {
+/**
+ * Implementation of hook_civicrm_pageRun
+ */
+function petitionemail_civicrm_pageRun(&$page) {
+  // This should be fired after most of the parent run()
+  // code is done, which means the activity status should
+  // be converted to "complete" if it has been properly
+  // verified.
+  $pageName = $page->getVar('_name');
+  if ($pageName == 'CRM_Campaign_Page_Petition_Confirm') { 
+    // Get the activity id from the URL
+    $activity_id  = CRM_Utils_Request::retrieve('a', 'String', CRM_Core_DAO::$_nullObject);
+    if(petitionemail_is_actionable_activity($activity_id)) {
+      petitionemail_process_signature($activity_id);
+    }
+  }
+}
+
+function petitionemail_process_signature($activity_id) {
+  $petition_id = petitionemail_get_petition_id_for_activity($activity_id);
   $sql = "SELECT default_message, 
                message_field, 
                subject,
@@ -387,7 +395,7 @@ function petitionemail_process_signature($survey_id, $activity_id, $profile_fiel
                recipients
          FROM civicrm_petition_email
          WHERE petition_id = %1 GROUP BY petition_id";
-  $params = array( 1 => array( $survey_id, 'Integer' ) );
+  $params = array( 1 => array( $petition_id, 'Integer' ) );
   $petition_email = CRM_Core_DAO::executeQuery( $sql, $params );
   $petition_email->fetch();
   if($petition_email->N == 0) {
@@ -396,8 +404,6 @@ function petitionemail_process_signature($survey_id, $activity_id, $profile_fiel
   }
 
   // Store variables we need
-  // Petition id and survey id are the same.
-  $petition_id = $survey_id;
   $default_message = $petition_email->default_message;
   $subject = $petition_email->subject;
   $group_id = $petition_email->group_id;
@@ -408,7 +414,7 @@ function petitionemail_process_signature($survey_id, $activity_id, $profile_fiel
   // Now retrieve the matching fields, if any
   $sql = "SELECT matching_field FROM civicrm_petition_email_matching_field
     WHERE petition_id = %1";
-  $params = array( 1 => array( $survey_id, 'Integer' ) );
+  $params = array( 1 => array( $petition_id, 'Integer' ) );
   $dao = CRM_Core_DAO::executeQuery($sql, $params);
   $matching_fields = array();
   while($dao->fetch()) {
@@ -422,19 +428,18 @@ function petitionemail_process_signature($survey_id, $activity_id, $profile_fiel
   // Figure out whether to use the user-supplied message or the default
   // message.
   $petition_message = NULL;
-  // If the petition has specified a message field, and we've encountered
-  // the profile post action....
-  if(!empty($message_field) && !is_null($profile_fields)) {
+  // If the petition has specified a message field
+  if(!empty($message_field)) {
     if(is_numeric($message_field)) {
       $message_field = 'custom_' . $message_field;
     }
     
-    // If the field is in the profile
-    if(array_key_exists($message_field, $profile_fields)) {
-      // If it's not empty...
-      if(!empty($profile_fields[$message_field])) {
-        $petition_message = $profile_fields[$message_field];
-      }
+    // Retrieve the value of the field for this activity
+    $params = array('id' => $activity_id, 
+      'return' => array($message_field, 'activity_type_id'));
+    $result = civicrm_api3('Activity', 'getsingle', $params);
+    if(!empty($result[$message_field])) {
+      $petition_message = $result[$message_field];
     }
   } 
 
@@ -482,11 +487,11 @@ function petitionemail_process_signature($survey_id, $activity_id, $profile_fiel
     if(!empty($recipient['email'])) {
       $email_params['toName'] = $recipient['name'];
       $email_params['toEmail'] = $recipient['email'];
-      $to = $email_params['toName'] . $email_params['toEmail'];
+      $to = $email_params['toName'] . ' ' . $email_params['toEmail'];
       $success = CRM_Utils_Mail::send($email_params);
 
       if($success == 1) {
-        CRM_Core_Session::setStatus( ts('Message sent successfully to') . " $to" );
+        CRM_Core_Session::setStatus( ts('Message sent successfully to') . " $to", '', 'success' );
       } else {
         CRM_Core_Session::setStatus( ts('Error sending message to') . " $to" );
       }
@@ -614,13 +619,41 @@ function petitionemail_parse_email_line($line) {
   return $ret;
 }
 
-function petitionemail_get_petition_type() {
-  $acttypegroup = civicrm_api3("OptionGroup", "getsingle", array('name' =>'activity_type'));
-  if ( $acttypegroup['id'] && !isset($acttypegroup['is_error']) ) {
-    $params = array ('option_group_id' => $acttypegroup['id'], 'name' =>'Petition');
-    $acttype = civicrm_api3("OptionValue", "getsingle", $params);
-    $petitiontype = $acttype['value'];
+/**
+ * Given an activity id, return the related petition id 
+ *
+ * Return FALSE if this is not an activity that is a petition
+ * signature. 
+ */
+function petitionemail_get_petition_id_for_activity($activity_id) {
+  // If there is a related civicrm_petition_email record, we are good to go.
+  // NOTE: source_record_id stores the survey_id which is the same thing
+  // as the petition_id for our purposes.
+  $sql = "SELECT a.source_record_id FROM civicrm_activity a JOIN
+    civicrm_petition_email pe ON a.source_record_id = pe.petition_id
+    WHERE a.id = %0";
+  $params = array(0 => array($activity_id, 'Integer'));
+  $dao = CRM_Core_DAO::executeQuery($sql, $params);
+  $dao->fetch();
+  if($dao->N == 0) return FALSE;
+  return $dao->source_record_id; 
+}
+
+/**
+ * Ensure activity_id should generate an email 
+ *
+ * Should have a related petition_email record and should have
+ * a status of complete and should have a date.
+ */
+function petitionemail_is_actionable_activity($activity_id) {
+  if(!petitionemail_get_petition_id_for_activity($activity_id)) {
+    return FALSE;
   }
-    
-  return $petitiontype;
+  $completed = CRM_Core_OptionGroup::getValue('activity_status', 'Completed', 'name');
+  $sql = "SELECT id FROM civicrm_activity WHERE id = %0 AND status_id = %1";
+  $params = array(0 => array($activity_id, 'Integer'), 1 => array($completed, 'Integer'));
+  $dao = CRM_Core_DAO::executeQuery($sql, $params);
+  $dao->fetch();
+  if($dao->N == 0) return FALSE;
+  return TRUE;
 }

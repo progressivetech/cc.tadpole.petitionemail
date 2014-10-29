@@ -1,15 +1,35 @@
 cj(document).ready( function() {
   showHideEmailPetition();
+  populateUserMessageFieldOptions();
   checkProfileIncludesMessage();
   cj("input#email_petition").click( function() { showHideEmailPetition(); });
-  cj("#profile_id").change( function() { checkProfileIncludesMessage(); });
+  cj("#profile_id").change( function() { populateUserMessageFieldOptions(); });
   cj("#user_message").change( function() { checkProfileIncludesMessage(); });
 });
 
+function populateUserMessageFieldOptions() {
+  var actProfile = cj("#profile_id").val();
+  var options = {};
+  cj('#user_message').val('');
+  cj('#user_message').empty();
+  if(actProfile) {
+    CRM.api("UFField","get",{ "uf_group_id" : actProfile },{ success:function (data) {
+      if(data['is_error'] == 0) {
+        cj.each(data["values"], function(key, value) {
+          cj('#user_message').append('<option value="' + key + '">' + value['label']  + '</option>');
+        });
+      }
+    }});
+  }
+  else {
+    options[''] = "No activity profile selected.";
+    cj('#user_message').append('<option value="">No activity profile selected.</option>');
+ }
+}
 function checkProfileIncludesMessage() {
   cj("#profileMissingMessage").remove();
   var actProfile = cj("#profile_id").val();
-  cj().crmAPI("UFField","get",{ "sequential" :"1", "uf_group_id" : actProfile },{ success:function (data){
+  CRM.api("UFField","get",{ "sequential" :"1", "uf_group_id" : actProfile },{ success:function (data){
     var msgField = cj("#user_message").val();
     if (msgField) {
       var fieldinfo = cj.inArray(msgField, data["values"])

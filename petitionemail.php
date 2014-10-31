@@ -638,10 +638,17 @@ function petitionemail_get_recipients($contact_id, $petition_vars) {
       $custom_field_id = str_replace('custom_', '', $matching_field);
       $dao = CRM_Core_DAO::executeQuery($sql, array(0 => array($custom_field_id, 'Integer')));
       $dao->fetch();
-      $from[] = "JOIN " . $dao->table_name . " ON " . $dao->table_name . ".entity_id = 
+      $from[] = "LEFT JOIN " . $dao->table_name . " ON " . $dao->table_name . ".entity_id = 
         c.id";
-      $where[] = $dao->column_name . ' = %' . $id;
-      // Fixme - we should use the proper data type for each custom field
+      if(!empty($value)) {
+        $where[] = $dao->column_name . ' = %' . $id;
+        // Fixme - we should use the proper data type for each custom field
+      }
+      else {
+        // Handle empty or NULL
+        $where[] = '(' . $dao->column_name . ' = %' . $id . ' OR ' .
+          $dao->column_name . ' IS NULL)';
+      }
       $params[$id] = array($value, 'String');
       $id++;
     }
@@ -655,7 +662,6 @@ function petitionemail_get_recipients($contact_id, $petition_vars) {
     $sql = "SELECT c.id, c.display_name, e.email FROM ";
     $sql .= implode("\n", $from);
     $sql .= " WHERE " . implode(" AND\n", $where);
-
     $dao = CRM_Core_DAO::executeQuery($sql, $params);
 
     while($dao->fetch()) {

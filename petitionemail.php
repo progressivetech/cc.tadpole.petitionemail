@@ -195,6 +195,40 @@ function petitionemail_civicrm_buildForm( $formName, &$form ) {
  * Ensure our values are consistent to avoid broken petitions.
  */
 function petitionemail_civicrm_validateForm($formName, &$fields, &$files, &$form, &$errors) {
+  if ($formName == 'CRM_Campaign_Form_Petition_Signature') {  
+    // Do some basic sanity checking to prevent spammers
+    if(empty($form->_surveyId)) {
+      // Can't do much without the survey_id
+      return;
+    }
+    $survey_id = $form->_surveyId;
+
+    // Check to see if it's an email petition
+    $sql = "SELECT message_field FROM civicrm_petition_email WHERE
+      petition_id = %0";
+    $dao = CRM_Core_DAO::executeQuery($sql, array(0 => array($survey_id, 'Integer')));
+    $dao->fetch();
+    if($dao->N == 0) {
+      // Nothing to do
+      return;
+    }
+
+    if(!empty($dao->message_field)) {
+      $field_name = 'custom_' . $dao->message_field;
+      // If we are allowing a user-supplied message field, ensure it doesn't
+      // have any URLs or HTML in it.
+      if(array_key_exists($field_name, $fields)) {
+        if(preg_match('#https?://#i', $fields[$field_name])) {
+          $errors[$field_name] = ts("To avoid spammers, you are not allowed to put web addresses in your message. Please revise your message and try again.");
+        }
+        // Now ensure we have no html tag
+        if (preg_match('/([\<])([^\>]{1,})*([\>])/i', $fields[$field_name] )) {
+          $errors[$field_name] = ts("To avoid spammers, you are not allowed to put HTML code in your message. Please revise your message and try again.");
+        }
+      }
+    }
+  }
+
   if($formName == 'CRM_Campaign_Form_Petition') {
     if(CRM_Utils_Array::value('email_petition', $fields)) {
       // If group_id is provided, make sure we also have location_type_id and at least one
@@ -738,3 +772,4 @@ function petitionemail_is_actionable_activity($activity_id) {
   if($dao->N == 0) return FALSE;
   return TRUE;
 }
+

@@ -388,6 +388,11 @@ function petitionemail_civicrm_pageRun(&$page) {
 
 function petitionemail_process_signature($activity_id) {
   $petition_id = petitionemail_get_petition_id_for_activity($activity_id);
+  if(empty($petition_id)) {
+    $log = "Failed to find petition id for activity id: $activity_id";
+    CRM_Core_Error::debug_log_message($log);
+    return FALSE;
+  }
   $sql = "SELECT default_message, 
                message_field, 
                subject,
@@ -474,7 +479,7 @@ function petitionemail_process_signature($activity_id) {
     'toEmail' => NULL,
     'subject' => $petition_email->subject,
     'text'    => $petition_message, 
-    'html'    => $petition_message
+    'html'    => NULL, 
   );
 
   // Get array of recipients
@@ -487,19 +492,81 @@ function petitionemail_process_signature($activity_id) {
   $recipients = petitionemail_get_recipients($contact_id, $petition_vars);
   while(list(, $recipient) = each($recipients)) {
     if(!empty($recipient['email'])) {
-      $email_params['toName'] = $recipient['name'];
-      $email_params['toEmail'] = $recipient['email'];
-      $to = $email_params['toName'] . ' ' . $email_params['toEmail'];
+      $log = "petition email: contact id ($contact_id) sending to email (" .
+        $recipient['email'] . ")";
+      CRM_Core_Error::debug_log_message($log);
+      if(!empty($recipient['contact_id'])) {
+        // Since we're sending to a recipient in the database, create this
+        // as an email activity so we record it properly.
 
-      $msg = "petition_email: '$contact_id' sending petition to '$to'";
-      CRM_Core_Error::debug_log_message($msg);
+        $log = "petition email: recording email as activity against ".
+          "target contact id: " . $recipient['contact_id'];
+        CRM_Core_Error::debug_log_message($log);
 
-      $success = CRM_Utils_Mail::send($email_params);
+        $contactDetails = array(0 => $recipient);
+        // We are sending a text message, so ensure it's the preferred one
+        $contactDetails[0]['preferred_mail_format'] = 'Text';
+        $subject = $email_params['subject'];
+        $text = $email_params['text'];
+        $html = $email_params['html'];
+        $emailAddress = $recipient['email'];
+        $userID = $contact_id;
+        $from = NULL; // This will be pulled from $contact_id,
+        $attachments = NULL;
+        $cc = NULL;
+        $bcc = NULL;
+        $contactIds = array($recipient['contact_id']);
 
-      if($success == 1) {
-        CRM_Core_Session::setStatus( ts('Message sent successfully to') . " $to", '', 'success' );
-      } else {
-        CRM_Core_Session::setStatus( ts('Error sending message to') . " $to" );
+        // Create/Send away.
+        $ret = CRM_Activity_BAO_Activity::sendEmail(
+          $contactDetails, $subject, $text, $html, $emailAddress, $userID,
+          $from, $attachments, $cc, $bcc, $contactIds
+        );
+
+        $activity_id = array_pop($ret);
+        $status = array_pop($ret);
+        if($status === TRUE) {
+          $log = "petition email: email sent successfully";
+          CRM_Core_Error::debug_log_message($log);
+
+          // Update the activity with the petition id so we can properly
+          // report on the email messages sent as a result of this petition.
+          $params = array(
+            'activity_id' => $activity_id,
+            'source_record_id' => $petition_id
+          );
+          $result = civicrm_api3('Activity', 'update', $params);
+          if($result['is_error'] != 0) {
+            $log = "civicrm petition: failed to update activity with ".
+              "source_record_id";
+            CRM_Core_Error::debug_log_message($log);
+          }
+        }
+        else {
+          $log = "petition email: failed to send email as activity.";
+          CRM_Core_Error::debug_log_message($log);
+          CRM_Core_Error::debug_log_message(print_r($ret, TRUE));
+        }
+      }
+      else {
+        // Handle targets not in the database.
+        $email_params['toName'] = $recipient['name'];
+        $email_params['toEmail'] = $recipient['email'];
+        $to = $email_params['toName'] . ' ' . $email_params['toEmail'];
+
+        $log = "petition_email: sending petition to '$to' via mail function.";
+        CRM_Core_Error::debug_log_message($log);
+
+        $success = CRM_Utils_Mail::send($email_params);
+
+        if($success == 1) {
+          CRM_Core_Session::setStatus( ts('Message sent successfully to') . "$to", '', 'success' );
+          $log = "petition_email: message sent.";
+        } else {
+          $log = "petition_email: message was not sent.";
+          CRM_Core_Session::setStatus( ts('Error sending message to') . "$to" );
+        }
+        CRM_Core_Error::debug_log_message($log);
       }
     }
   }
@@ -515,6 +582,7 @@ function petitionemail_get_recipients($contact_id, $petition_vars) {
       $email_parts = petitionemail_parse_email_line($recipient); 
       if(FALSE !== $email_parts) {
         $ret[] = array(
+          'contact_id' => NULL,
           'name' => $email_parts['name'],
           'email' => $email_parts['email']
         );
@@ -584,7 +652,7 @@ function petitionemail_get_recipients($contact_id, $petition_vars) {
     $params[$id] = array($petition_vars['location_type_id'], 'Integer');
 
     // put it all together
-    $sql = "SELECT c.display_name, e.email FROM ";
+    $sql = "SELECT c.id, c.display_name, e.email FROM ";
     $sql .= implode("\n", $from);
     $sql .= " WHERE " . implode(" AND\n", $where);
 
@@ -592,6 +660,7 @@ function petitionemail_get_recipients($contact_id, $petition_vars) {
 
     while($dao->fetch()) {
       $ret[] = array(
+        'contact_id' => $dao->id,
         'name' => $dao->display_name,
         'email' => $dao->email
       );

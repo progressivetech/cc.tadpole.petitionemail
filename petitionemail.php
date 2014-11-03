@@ -420,13 +420,8 @@ function petitionemail_civicrm_pageRun(&$page) {
   }
 }
 
-function petitionemail_process_signature($activity_id) {
-  $petition_id = petitionemail_get_petition_id_for_activity($activity_id);
-  if(empty($petition_id)) {
-    $log = "Failed to find petition id for activity id: $activity_id";
-    CRM_Core_Error::debug_log_message($log);
-    return FALSE;
-  }
+function petitionemail_get_petition_details($petition_id) {
+  $ret = array();
   $sql = "SELECT default_message, 
                message_field, 
                subject,
@@ -440,16 +435,16 @@ function petitionemail_process_signature($activity_id) {
   $petition_email->fetch();
   if($petition_email->N == 0) {
     // Must not be a petition with a target.
-    return;
+    return $ret;
   }
 
   // Store variables we need
-  $default_message = $petition_email->default_message;
-  $subject = $petition_email->subject;
-  $group_id = $petition_email->group_id;
-  $location_type_id = $petition_email->location_type_id;
-  $message_field = $petition_email->message_field;
-  $recipients = $petition_email->recipients;
+  $ret['default_message'] = $petition_email->default_message;
+  $ret['subject'] = $petition_email->subject;
+  $ret['group_id'] = $petition_email->group_id;
+  $ret['location_type_id'] = $petition_email->location_type_id;
+  $ret['message_field'] = $petition_email->message_field;
+  $ret['recipients'] = $petition_email->recipients;
 
   // Now retrieve the matching fields, if any
   $sql = "SELECT matching_field FROM civicrm_petition_email_matching_field
@@ -462,8 +457,22 @@ function petitionemail_process_signature($activity_id) {
     // The value will be populated below with the value from the petition
     // signer.
     $key = 'custom_' . $dao->matching_field;
-    $matching_fields[$key] = NULL;
+    $ret['matching_fields'][$key] = NULL;
   }
+  return $ret;
+}
+
+function petitionemail_process_signature($activity_id) {
+  $petition_id = petitionemail_get_petition_id_for_activity($activity_id);
+  if(empty($petition_id)) {
+    $log = "Failed to find petition id for activity id: $activity_id";
+    CRM_Core_Error::debug_log_message($log);
+    return FALSE;
+  }
+  $petition_vars = petitionemail_get_petition_details($petition_id);
+  $default_message = $ret['default_message'];
+  $subject = $ret['subject'];
+  $message_field = $ret['message_field'];
 
   // Figure out whether to use the user-supplied message or the default
   // message.
@@ -517,13 +526,7 @@ function petitionemail_process_signature($activity_id) {
   );
 
   // Get array of recipients
-  $petition_vars = array(
-    'recipients' => $recipients,
-    'group_id' => $group_id,
-    'matching_fields' => $matching_fields,
-    'location_type_id' => $location_type_id
-  );
-  $recipients = petitionemail_get_recipients($contact_id, $petition_vars);
+  $recipients = petitionemail_get_recipients($contact_id, $petition_id);
   while(list(, $recipient) = each($recipients)) {
     if(!empty($recipient['email'])) {
       $log = "petition email: contact id ($contact_id) sending to email (" .
@@ -606,7 +609,8 @@ function petitionemail_process_signature($activity_id) {
   }
 }
  
-function petitionemail_get_recipients($contact_id, $petition_vars) {
+function petitionemail_get_recipients($contact_id, $petition_id) {
+  $petition_vars = petitionemail_get_petition_details($petition_id);
   $ret = array();
   // First, parse the additional recipients, if any. These get the email
   // regarldess of who signs it.
@@ -697,7 +701,6 @@ function petitionemail_get_recipients($contact_id, $petition_vars) {
     $sql .= implode("\n", $from);
     $sql .= " WHERE " . implode(" AND\n", $where);
     $dao = CRM_Core_DAO::executeQuery($sql, $params);
-
     while($dao->fetch()) {
       $ret[] = array(
         'contact_id' => $dao->id,

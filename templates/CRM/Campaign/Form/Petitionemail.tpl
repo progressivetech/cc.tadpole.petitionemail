@@ -3,8 +3,24 @@
        <td class="view-value">{$form.email_petition.html}
       <div class="description">{ts}Should signatures generate an email to the petition's  target?.{/ts}</div></td>
    </tr>
+   <tr class="crm-campaign-survey-form-block-subject">
+       <td class="label">{$form.subject.label}</td>
+       <td class="view-value">{$form.subject.html}
+      <div class="description">{ts}Enter the subject line that should appear in the target email.{/ts}</div></td>
+   </tr>
+   <tr class="crm-campaign-survey-form-block-default_message">
+       <td class="label">{$form.default_message.label}</td>
+       <td class="view-value">{$form.default_message.html}
+      <div class="description">{ts}Enter the default message to be included in the email.{/ts}</div></td>
+   </tr>
+  <tr class="crm-campaign-survey-form-block-user_message">
+       <td class="label">{$form.user_message.label}</td>
+       <td class="view-value">{$form.user_message.html}
+      <div class="description">{ts}Select a field that will have the signer's custom message.  Make sure it is included in the Activity Profile you selected.{/ts}</div></td>
+   </tr>
+
    <tr class="crm-campaign-survey-form-block-recipient_options">
-       <td class="label">Recipient Options</td>
+       <td class="label">Target/Recipient Options</td>
        <td class="view-value">
          <div class="petitionemail-recipient-options">
            <div class="petition-email-recipient-option-description">{ts}You must specify who will receive a copy of the petition using at least one of the methods below. You may also use both methods if you would like one set of recipients to receive all petitions signed and another set of recipients to be chosen dynamically.{/ts}</div>
@@ -34,18 +50,4 @@
        </td>
    </tr>
   
-   <tr class="crm-campaign-survey-form-block-user_message">
-       <td class="label">{$form.user_message.label}</td>
-       <td class="view-value">{$form.user_message.html}
-      <div class="description">{ts}Select a field that will have the signer's custom message.  Make sure it is included in the Activity Profile you selected.{/ts}</div></td>
-   </tr>
-   <tr class="crm-campaign-survey-form-block-default_message">
-       <td class="label">{$form.default_message.label}</td>
-       <td class="view-value">{$form.default_message.html}
-      <div class="description">{ts}Enter the default message to be included in the email.{/ts}</div></td>
-   </tr>
-   <tr class="crm-campaign-survey-form-block-subject">
-       <td class="label">{$form.subject.label}</td>
-       <td class="view-value">{$form.subject.html}
-      <div class="description">{ts}Enter the subject line that should appear in the target email.{/ts}</div></td>
-   </tr>
+      

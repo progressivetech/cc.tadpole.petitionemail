@@ -29,6 +29,8 @@ function petitionemail_civicrm_install() {
  * Implementation of hook_civicrm_uninstall
  */
 function petitionemail_civicrm_uninstall() {
+  // Clear out our variables.
+  petitionemail_remove_variables();
   return _petitionemail_civix_civicrm_uninstall();
 }
 
@@ -36,6 +38,8 @@ function petitionemail_civicrm_uninstall() {
  * Implementation of hook_civicrm_enable
  */
 function petitionemail_civicrm_enable() {
+  // Ensure the profile id is created.
+  petitionemail_get_profile_id();
   return _petitionemail_civix_civicrm_enable();
 }
 
@@ -167,16 +171,16 @@ function petitionemail_civicrm_buildForm( $formName, &$form ) {
     $group_options = $choose_one + CRM_Core_PseudoConstant::group('Mailing');
     $location_options = $choose_one + 
       CRM_Core_PseudoConstant::get('CRM_Core_DAO_Address', 'location_type_id');
-    $sql = "SELECT f.id, g.title, f.label FROM civicrm_custom_group g JOIN
-      civicrm_custom_field f ON g.id = f.custom_group_id
-      WHERE g.is_active = 1 AND f.is_active = 1 AND extends = 'Individual' 
-      ORDER BY g.title, f.label";
-    $dao = CRM_Core_DAO::executeQuery($sql);
-    $field_options = array();
-    while($dao->fetch()) {
-      $field_options[$dao->id] = $dao->title . '::' . $dao->label;
-    }
 
+    $field_options = petitionemail_get_profile_fields();
+    $field_options_count = count($field_options);
+    $form->assign('petitionemail_matching_fields_count', $field_options_count);
+    $url_params = array(
+      'gid' => petitionemail_get_profile_id(),
+      'action' => 'browse'
+    );
+    $url = CRM_Utils_System::url("civicrm/admin/uf/group/field", $url_params);
+    $form->assign('petitionemail_profile_edit_link', $url);
     $form->add('select', 'group_id', ts('Matching Target Group'), $group_options);
     $form->addElement('advmultiselect', 'matching_fields', ts('Matching field(s)'), 
       $field_options, array('style' => 'width:400px;', 'class' => 'advmultiselect'));
@@ -187,6 +191,47 @@ function petitionemail_civicrm_buildForm( $formName, &$form ) {
     $form->add('textarea', 'default_message', ts('Default Message'));
     $form->add('text', 'subject', ts('Email Subject Line'));
   }
+}
+
+/**
+ * Get fields from the special petition email profile.
+ *
+ * Filter out un-supported fields.
+ */
+function petitionemail_get_profile_fields() {
+  $session = CRM_Core_Session::singleton();
+  $ret = array();
+  $uf_group_id = petitionemail_get_profile_id();
+  $fields = CRM_Core_BAO_UFGroup::getFields($uf_group_id); 
+  $allowed = petitionemail_get_allowed_matching_fields();
+  if(is_array($fields)) {
+    reset($fields);
+    while(list($id, $value) = each($fields)) {
+      $include = FALSE;
+      // Check to see if it's a custom field
+      if(preg_match('/^custom_/', $id)) {
+        $ret[$id] = $value['title'];
+        continue;
+      }
+      else {
+        // Check to see if it's an address field
+        $field_pieces = petitionemail_split_address_field($id);
+        if($field_pieces) {
+          if($field_pieces['location_name'] != 'Primary') {
+            $session->setStatus(ts("Only primary address fields are support at this time."));
+            continue;
+          }
+          if(array_key_exists($field_pieces['field_name'], $allowed)) {
+            $ret[$id] = $value['title'];
+            continue;
+          }
+        }
+      }
+      // Warn the user about a field that is not allowed
+      $session->setStatus(ts("The field $id is not supported as a matching field at this time."));
+    }
+  }
+  return $ret;
 }
 
 /**
@@ -456,8 +501,7 @@ function petitionemail_get_petition_details($petition_id) {
     // Key the array to the custom id number and leave the value blank.
     // The value will be populated below with the value from the petition
     // signer.
-    $key = 'custom_' . $dao->matching_field;
-    $ret['matching_fields'][$key] = NULL;
+    $ret['matching_fields'][$dao->matching_field] = NULL;
   }
   return $ret;
 }
@@ -609,6 +653,28 @@ function petitionemail_process_signature($activity_id) {
   }
 }
  
+/**
+ * Non custom data fields allowed to be a matching field.
+ *
+ * All custom fields can be used as matching fields, but only
+ * a subset of non-custom fields (so we can be sure to build
+ * a working query to retrieve them).
+ */
+function petitionemail_get_allowed_matching_fields() {
+  $ret = array(
+    'street_name' => 'civicrm_address',
+    'street_number' => 'civicrm_address',
+    'street_name' => 'civicrm_address',
+    'city' => 'civicrm_address',
+    'county_id' => 'civicrm_address',
+    'state_province_id' => 'civicrm_address',
+    'postal_code' => 'civicrm_address',
+    'postal_code_suffix' => 'civicrm_address',
+    'country_id' => 'civicrm_address',
+  );
+  return $ret;
+}
+
 function petitionemail_get_recipients($contact_id, $petition_id) {
   $petition_vars = petitionemail_get_petition_details($petition_id);
   $ret = array();
@@ -634,15 +700,72 @@ function petitionemail_get_recipients($contact_id, $petition_id) {
     // are used to match the contact who signed the petition with the 
     // contact or contacts in the target group.
     $matching_fields = $petition_vars['matching_fields'];
+
+    // Given the matching fields, we're going to do an API call against
+    // the contact to get the values that we will be matching on.
+
+    // Build a return_fields array that we will pass to the api call to 
+    // specify the fields we want returned with this query.
     $field_names = array_keys($matching_fields);
-    $contact_params = array('return' => $field_names, 'id' => $contact_id);
+    $return_fields = array();
+    reset($field_names);
+    while(list(, $field_name) = each($field_names)) {
+      // If the field_name starts with custom_ we can add it straight 
+      // away.
+      if(preg_match('/^custom_/', $field_name)) {
+        $return_fields[] = $field_name;
+        continue;
+      }
+
+      // Look for field names with a - in them - that's an indication 
+      // that it's an address field which will have the location part
+      // stuck into the name.
+      $field_pieces = petitionemail_split_address_field($field_name);
+      if($field_pieces) {
+        if($field_pieces['location_name'] == 'Primary') {
+          // Primary will be included via the api call, so we just need
+          // the field name. If it's not primary, we'll have to do a 
+          // manual SQL call below to get the value.
+          $return_fields[] = $field_pieces['field_name'];
+          continue;
+        }
+      }
+      // This is an error FIXME
+    }
+    $contact_params = array('return' => $return_fields, 'id' => $contact_id);
     $contact = civicrm_api3('Contact', 'getsingle', $contact_params);
     while(list($matching_field) = each($matching_fields)) {
-      $matching_fields[$matching_field] = $contact[$matching_field];
-    } 
+      // Check if the field was returned. If not, it's probably an address field
+      if(array_key_exists($matching_field, $contact)) {
+        $matching_fields[$matching_field] = $contact[$matching_field];
+        continue;
+      }
+      // This means it's probably an address field.
+      $field_pieces = petitionemail_split_address_field($matching_field);
+      if(!$field_pieces) {
+        // This is an error FIXME
+        continue;
+      }
+      $location_name = $field_pieces['location_name'];
+      $field_name = $field_pieces['field_name'];
+      if($location_name == 'Primary' && array_key_exists($field_name, $contact)) {
+        // We have to unset the field that was saved as fieldname-locatiname
+        unset($matching_fields[$matching_field]);
 
+        // And now set the proper key
+        $matching_field = $field_name;
+        $matching_fields[$matching_field] = $contact[$matching_field];
+        continue;
+      }
+      else {
+        // This is an error FIXME
+        continue;
+      }
+    } 
     $from = array();
-    $where = array();
+    $group_where = array();
+    $field_where = array();
+    $email_location_where = array();
     $params = array();
 
     $group_id = $petition_vars['group_id'];
@@ -652,54 +775,84 @@ function petitionemail_get_recipients($contact_id, $petition_id) {
       if(!empty($results['saved_search_id'])) {
         // Populate the cache
         CRM_Contact_BAO_GroupContactCache::check($group_id);
-        $from [] = 'civicrm_contact c JOIN civicrm_group_contact_cache cc ON
+        $from[] = 'civicrm_contact c JOIN civicrm_group_contact_cache cc ON
           c.id = cc.contact_id';
-        $where[] = 'cc.group_id = %0';
+        $group_where[] = 'cc.group_id = %0';
         $params[0] = array($group_id, 'Integer');
       }
       else {
         $from[] = 'civicrm_contact c JOIN civicrm_group_contact gc ON
           c.id = gc.contact_id';
-        $where[] = 'gc.group_id = %0';
-        $where[] = 'gc.status = "Added"';
+        $group_where[] = 'gc.group_id = %0';
+        $group_where[] = 'gc.status = "Added"';
         $params[0] = array($group_id, 'Integer');
       }
     }
 
-    // Now we gather information on the custom fields at play
+    // Now we gather information on the matching fields at play
     reset($matching_fields);
     $id = 1;
+    $added_tables = array();
     while(list($matching_field, $value) = each($matching_fields)) {
-      $sql = "SELECT column_name, table_name FROM civicrm_custom_group g 
-        JOIN civicrm_custom_field f ON g.id = f.custom_group_id WHERE 
-        f.id = %0";
-      $custom_field_id = str_replace('custom_', '', $matching_field);
-      $dao = CRM_Core_DAO::executeQuery($sql, array(0 => array($custom_field_id, 'Integer')));
-      $dao->fetch();
-      $from[] = "LEFT JOIN " . $dao->table_name . " ON " . $dao->table_name . ".entity_id = 
-        c.id";
-      if(!empty($value)) {
-        $where[] = $dao->column_name . ' = %' . $id;
-        // Fixme - we should use the proper data type for each custom field
+      if(preg_match('/^custom_/', $matching_field)) {
+        $sql = "SELECT column_name, table_name FROM civicrm_custom_group g 
+          JOIN civicrm_custom_field f ON g.id = f.custom_group_id WHERE 
+          f.id = %0";
+        $custom_field_id = str_replace('custom_', '', $matching_field);
+        $dao = CRM_Core_DAO::executeQuery($sql, array(0 => array($custom_field_id, 'Integer')));
+        $dao->fetch();
+        if(!in_array($dao->table_name, $added_tables)) {
+          $from[] = "LEFT JOIN " . $dao->table_name . " ON " . $dao->table_name . ".entity_id = 
+            c.id";
+          $added_tables[] = $dao->table_name;
+        }
+        if(!empty($value)) {
+          $field_where[] = $dao->column_name . ' = %' . $id;
+          // Fixme - we should use the proper data type for each custom field
+        }
+        else {
+          // Handle empty or NULL
+          $field_where[] = '(' . $dao->column_name . ' = %' . $id . ' OR ' .
+            $dao->column_name . ' IS NULL)';
+        }
+        $params[$id] = array($value, 'String');
       }
       else {
-        // Handle empty or NULL
-        $where[] = '(' . $dao->column_name . ' = %' . $id . ' OR ' .
-          $dao->column_name . ' IS NULL)';
+        // Handle non-custom fields (address fields)
+        if(!in_array('civicrm_address', $added_tables)) {
+          $from[] = "LEFT JOIN civicrm_address a ON a.contact_id = c.id";
+          $added_tables[] = 'civicrm_address';
+        }
+        if(!empty($value)) {
+          $field_where[] = '(' . $matching_field . ' = %' . $id . ')';
+        }
+        else {
+          // Handle empty or NULL
+          $field_where[] = '(' . $matching_field . ' = %' . $id . ' OR ' .
+            $matching_field . ' IS NULL)';
+        }
+        $params[$id] = array($value, 'String');
       }
-      $params[$id] = array($value, 'String');
       $id++;
     }
 
     // Now add the right email lookup info
     $from[] = "JOIN civicrm_email e ON c.id = e.contact_id";
-    $where[] = 'e.location_type_id = %' . $id;
+    $email_location_where[] = 'e.location_type_id = %' . $id;
     $params[$id] = array($petition_vars['location_type_id'], 'Integer');
 
     // put it all together
-    $sql = "SELECT c.id, c.display_name, e.email FROM ";
+    $sql = "SELECT DISTINCT c.id, c.display_name, e.email FROM ";
     $sql .= implode("\n", $from);
-    $sql .= " WHERE " . implode(" AND\n", $where);
+    $sql .= " WHERE ".
+      "(" . implode(" AND\n", $group_where) . ") " .
+      " AND " .
+      "(" .  implode( " OR\n", $field_where) . ") " .
+      "AND " .
+      "(" .  implode(" AND\n", $email_location_where) .  ")";
+
+    // echo "sql: $sql\n";
+    // print_r($params);
     $dao = CRM_Core_DAO::executeQuery($sql, $params);
     while($dao->fetch()) {
       $ret[] = array(
@@ -710,6 +863,28 @@ function petitionemail_get_recipients($contact_id, $petition_id) {
     }
   }
   return $ret; 
+}
+
+/**
+ * Split address field name
+ * 
+ * Field names in profiles are stored in the format
+ * fieldname-locationame (e.g. postal_code-Primary).
+ * This function breaks that string into the field name
+ * and location name or returns FALSE if it's not a
+ * location field.
+ */
+function petitionemail_split_address_field($field_name) {
+  $ret = FALSE;
+  if(preg_match('/([a-zA-Z0-9_]+)-([a-zA-Z0-9_]+)/', $field_name, $matches)) {
+    if(!empty($matches[1]) && !empty($matches[2])) {
+      $ret = array(
+        'field_name' => $matches[1],
+        'location_name' => $matches[2],
+      );
+    }
+  }
+  return $ret;
 }
 
 /**
@@ -776,3 +951,85 @@ function petitionemail_is_actionable_activity($activity_id) {
   return TRUE;
 }
 
+/**
+ * Helper function to get or create required profile
+ *
+ * This profile controls which fields can be used to match a petition 
+ * signer with a petition target. We use a profile to avoid having a
+ * giant list of fields presented to the user.
+ *
+ * This function ensures that the profile is created and if not, it
+ * creates it. 
+ *
+ * @return integer profile id 
+ */
+function petitionemail_get_profile_id() {
+  $group = 'petitionemail';
+  $key = 'profile_id';
+  $ret = CRM_Core_BAO_Setting::getItem($group, $key);
+  if(!empty($ret)) {
+    // Ensure it exists
+    $sql = "SELECT id FROM civicrm_uf_group WHERE id = %0";
+    $dao = CRM_Core_DAO::executeQuery($sql, array(0 => array($ret, 'Integer')));
+    $dao->fetch();
+    if($dao->N == 1) {
+      return $ret;
+    }
+    // Delete this variable - probably the user deleted the profile not knowing
+    // what it was used for.
+    $sql = "DELETE FROM civicrm_setting WHERE group_name = %0 AND name = %1";
+    $params = array(
+      0 => array($group, 'String'),
+      1 => array($key, 'String')
+    );
+    CRM_Core_DAO::executeQuery($sql, $params);
+  }
+
+  // Create the profile
+  // We have to manually set created_id if the current user is not set
+  $session = CRM_Core_Session::singleton();
+  $contact_id = $session->get('userID');
+  if(empty($contact_id)) {
+    // Maybe we are running via drush?
+    // Try the contact associated with uid 1
+    $contact_id = CRM_Core_BAO_UFMatch::getContactId(1);
+    if(empty($contact_id)) {
+      // Last ditch effort
+      $sql = "SELECT MIN(id) FROM civicrm_contact WHERE is_active = 1 AND is_deleted = 0";
+      $dao = CRM_Core_DAO::executeQuery($sql);
+      $dao->fetch();
+      $contact_id = $dao->id;
+    }
+  }
+
+  $description = ts('This profile controls which fields are available as
+    matching fields when using the petition email extension. Please do
+    not delete this profile.');
+  $params = array(
+    'name' => 'petitionemail_auto_installed_profile',
+    'title' => ts('Petition Email Available Matching fields'),
+    'description' => $description,
+    'created_id' => $contact_id
+  );
+  $results = civicrm_api3('UFGroup', 'create', $params);
+  if($results['is_error'] != 0) {
+    $session->setStatus(ts("Error creating the petition email profile group."));
+    return FALSE;
+  }
+  $value = array_pop($results['values']);
+  $id = $value['id'];
+
+  CRM_Core_BAO_Setting::setItem($id, $group, $key);
+  return $id;
+}
+
+/**
+ * Helper to remove any extension created variables
+ */
+function petitionemail_remove_variables() {
+  $sql = "DELETE FROM civicrm_setting WHERE group_name = %0";
+  $params = array(
+    0 => array($group, 'String')
+  );
+  CRM_Core_DAO::executeQuery($sql, $params);
+}

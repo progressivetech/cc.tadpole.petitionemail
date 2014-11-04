@@ -34,7 +34,14 @@
 
            <div class="label">{$form.matching_fields.label}</div>
            <div class="view-value">{$form.matching_fields.html}</div>
-           <div class="description">{ts}If the user and the target have the same value for this field, then the user's petition will be sent to the matching target.{/ts}</div>
+           <div class="description">
+           {ts}If the user and the target have the same value for this field (even if the value is empty), then the user's petition will be sent to the matching target.{/ts}
+           {if $petitionemail_matching_fields_count eq 0}
+           {ts}No fields are configured to be used as matching fields. Please <a href={$petitionemail_profile_edit_link}>add fields to the petitionemail profile</a>.{/ts}
+           {else}
+           {ts}Don't see the field you want to use? You can <a href={$petitionemail_profile_edit_link}>add more fields to the petitionemail profile</a> and they will show up here.{/ts}
+           {/if}
+           </div>
 
            <div class="label">{$form.location_type_id.label}</div>
            <div class="view-value">{$form.location_type_id.html}</div>

@@ -529,7 +529,7 @@ function petitionemail_get_petition_details($petition_id) {
   $petition_email->fetch();
   if($petition_email->N == 0) {
     // Must not be a petition with a target.
-    return $ret;
+    return FALSE;;
   }
 
   // Store variables we need
@@ -559,6 +559,10 @@ function petitionemail_process_signature($activity_id) {
     return FALSE;
   }
   $petition_vars = petitionemail_get_petition_details($petition_id);
+  if(!$petition_vars) {
+    // Nothing to process, this isn't an email target enabled petition
+    return;
+  }
   $default_message = $petition_vars['default_message'];
   $subject = $petition_vars['subject'];
   $message_field = $petition_vars['message_field'];
@@ -583,10 +587,11 @@ function petitionemail_process_signature($activity_id) {
   }
   $activity = civicrm_api3("Activity", "getsingle", array ('id' => $activity_id));
   $contact_id = $activity['source_contact_id'];
-  $from = civicrm_api3("Contact", "getsingle", array ('id' => $contact_id));
+  $contact = civicrm_api3("Contact", "getsingle", array ('id' => $contact_id));
 
-  if (array_key_exists('email', $from) && !empty($from['email'])) {
-    $from = $from['display_name'] . ' <' . $from['email'] . '>';
+  $from = NULL;
+  if (array_key_exists('email', $contact) && !empty($contact['email'])) {
+    $from = $contact['display_name'] . ' <' . $contact['email'] . '>';
   } else {
     $domain = civicrm_api3("Domain", "get", array ());
     if ($domain['is_error'] != 0 || !is_array($domain['values'])) { 
@@ -596,7 +601,7 @@ function petitionemail_process_signature($activity_id) {
       CRM_Core_Error::debug_log_message($msg);
       return; 
     }
-    $from = '"' . $from['display_name'] . '"' . ' <' .
+    $from = '"' . $contact['display_name'] . '"' . ' <' .
       $domain['values']['from_email'] . '>';
   }
 
@@ -605,7 +610,7 @@ function petitionemail_process_signature($activity_id) {
     'from'    => $from,
     'toName'  => NULL,
     'toEmail' => NULL,
-    'subject' => $petition_email->subject,
+    'subject' => $subject,
     'text'    => $petition_message, 
     'html'    => NULL, 
   );
@@ -718,6 +723,10 @@ function petitionemail_get_allowed_matching_fields() {
 
 function petitionemail_get_recipients($contact_id, $petition_id) {
   $petition_vars = petitionemail_get_petition_details($petition_id);
+  if(!$petition_vars) {
+    // Not an email target enabled petition
+    return;
+  }
   $ret = array();
   // First, parse the additional recipients, if any. These get the email
   // regarldess of who signs it.
@@ -737,7 +746,7 @@ function petitionemail_get_recipients($contact_id, $petition_id) {
   // If there are any matching criteria (for a dynamic lookup) we do a
   // complex query to figure out which members of the group should be
   // included as recipients.
-  if(count($petition_vars['matching'] > 0)) {
+  if(count($petition_vars['matching']) > 0) {
     // This comes as an array with the key being the matching field and
     // the value being the matching_group_id.
     $matching_fields = $petition_vars['matching'];
@@ -840,7 +849,7 @@ function petitionemail_get_recipients($contact_id, $petition_id) {
           // Populate the cache
           CRM_Contact_BAO_GroupContactCache::check($group_id);
           if(!in_array('civicrm_group_contact_cache', $added_tables)) {
-            $from[] = 'JOIN civicrm_group_contact_cache cc ON
+            $from[] = 'LEFT JOIN civicrm_group_contact_cache cc ON
               c.id = cc.contact_id';
             $added_tables[] = 'civicrm_group_contact_cache';
           }
@@ -850,7 +859,7 @@ function petitionemail_get_recipients($contact_id, $petition_id) {
         }
         else {
           if(!in_array('civicrm_group_contact', $added_tables)) {
-            $from[] = 'JOIN civicrm_group_contact gc ON
+            $from[] = 'LEFT JOIN civicrm_group_contact gc ON
               c.id = gc.contact_id';
             $added_tables[] = 'civicrm_group_contact';
           }
@@ -914,7 +923,6 @@ function petitionemail_get_recipients($contact_id, $petition_id) {
     $sql = "SELECT DISTINCT c.id, c.display_name, e.email ";
     $sql .= "FROM " . implode("\n", $from) . " ";
     $sql .= "WHERE " . implode(" AND\n", $where);
-
     $dao = CRM_Core_DAO::executeQuery($sql, $params);
     while($dao->fetch()) {
       $ret[] = array(

@@ -10,7 +10,8 @@ CREATE TABLE IF NOT EXISTS `civicrm_petition_email` (
   `subject` varchar(128) DEFAULT NULL COMMENT 'The subject line for outgoing emails.',
   `recipients` text COMMENT 'The name and email address of additional targets that should receive a copy of all petitions signed, separated by line breaks.',
   PRIMARY KEY (`petition_id`),
-  KEY `petition_id` (`petition_id`)
+  KEY `petition_id` (`petition_id`),
+  CONSTRAINT `FK_civicrm_petition_email_petition_id` FOREIGN KEY (`petition_id`) REFERENCES `civicrm_survey` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8 COMMENT='Stores recipient and message information for petitions.';
 
 

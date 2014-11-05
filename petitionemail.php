@@ -96,6 +96,10 @@ function petitionemail_civicrm_buildForm( $formName, &$form ) {
       $dao = CRM_Core_DAO::executeQuery( $sql, $params );
       $defaults = array();
       $dao->fetch();
+      if($dao->N == 0) {
+        // Not a email enabled petition
+        return;
+      }
       $message_field = $dao->message_field;
       $defaults[$message_field] = $dao->default_message;
       $form->setDefaults($defaults);

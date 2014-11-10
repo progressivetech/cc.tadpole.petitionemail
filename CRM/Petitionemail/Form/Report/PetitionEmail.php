@@ -105,7 +105,7 @@ class CRM_Petitionemail_Form_Report_PetitionEmail extends CRM_Report_Form {
   }
 
   function where() {
-    $petition_id = $this->_params['petition_id_value'];
+    $petition_id = intval($this->_params['petition_id_value']);
     $group_id = NULL;
     if(array_key_exists('group_id_value', $this->_params)) {
       $group_id = intval($this->_params['group_id_value']);
@@ -127,7 +127,7 @@ class CRM_Petitionemail_Form_Report_PetitionEmail extends CRM_Report_Form {
     $signed = "{$this->_aliases['civicrm_contact']}.id IN (SELECT contact_id
       FROM civicrm_activity_contact ac JOIN civicrm_activity a ON
       ac.activity_id = a.id WHERE ac.record_type_id = $source_activity_record_type_id
-      AND source_record_id = $petition_id)";
+      AND source_record_id = $petition_id AND a.activity_type_id = $petition_activity_type_id)";
 
     // Now the people in the specified group
     if($group_id) {

@@ -8,6 +8,11 @@
        <td class="view-value">{$form.subject.html}
       <div class="description">{ts}Enter the subject line that should appear in the target email.{/ts}</div></td>
    </tr>
+   <tr class="crm-campaign-survey-form-block-subject_field">
+       <td class="label">{$form.subject_field.label}</td>
+       <td class="view-value">{$form.subject_field.html}
+      <div class="description">{ts}Select a field that will have the signer's custom subject line.  Make sure it is included in the Activity Profile you selected.{/ts}</div></td>
+   </tr>
    <tr class="crm-campaign-survey-form-block-default_message">
        <td class="label">{$form.default_message.label}</td>
        <td class="view-value">{$form.default_message.html}

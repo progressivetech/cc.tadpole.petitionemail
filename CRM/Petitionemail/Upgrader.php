@@ -51,4 +51,13 @@ class CRM_Petitionemail_Upgrader extends CRM_Petitionemail_Upgrader_Base {
     if(!$this->executeSqlFile('sql/Petitionemail_1001_upgrade.sql')) return FALSE;
     return TRUE;
   }
+
+  /**
+   * Add field to allow user to specify custom subject line.
+   */
+  function upgrade_1002() {
+    if(!$this->executeSqlFile('sql/Petitionemail_1002_upgrade.sql')) return FALSE;
+    return TRUE;
+  }
+
 }

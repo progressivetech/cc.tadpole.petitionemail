@@ -1,23 +1,28 @@
 cj(document).ready( function() {
   showHideEmailPetition();
-  populateUserMessageFieldOptions();
+  populateUserFieldOptions();
   cj("input#email_petition").click( function() { showHideEmailPetition(); });
-  cj("#profile_id").change( function() { populateUserMessageFieldOptions(); });
+  cj("#profile_id").change( function() { populateUserFieldOptions(); });
 });
 
-function populateUserMessageFieldOptions() {
+function populateUserFieldOptions() {
   var actProfile = cj("#profile_id").val();
-  var selected = cj('#message_field').val();
+  var selected_message = cj('#message_field').val();
+  var selected_subject = cj('#subject_field').val();
   var options = {};
   cj('#message_field').empty();
+  cj('#subject_field').empty();
   if(actProfile) {
     CRM.api("UFField","get",{ "uf_group_id" : actProfile },{ success:function (data) {
       if(data['is_error'] == 0) {
         cj('#message_field').append('<option value="">--Choose one--</option>');
+        cj('#subject_field').append('<option value="">--Choose one--</option>');
         cj.each(data["values"], function(key, value) {
           cj('#message_field').append('<option value="' + value['field_name'] + '">' + value['label']  + '</option>');
+          cj('#subject_field').append('<option value="' + value['field_name'] + '">' + value['label']  + '</option>');
         });
-        cj('#message_field').val(selected);
+        cj('#message_field').val(selected_message);
+        cj('#subject_field').val(selected_subject);
       }
     }});
   }

@@ -88,7 +88,9 @@ function petitionemail_civicrm_buildForm( $formName, &$form ) {
     if ($survey_id) {
       $sql = "SELECT petition_id, 
                   default_message, 
+                  subject, 
                   message_field, 
+                  subject_field,
                   subject 
              FROM civicrm_petition_email 
              WHERE petition_id = %1";
@@ -101,7 +103,9 @@ function petitionemail_civicrm_buildForm( $formName, &$form ) {
         return;
       }
       $message_field = $dao->message_field;
+      $subject_field = $dao->subject_field;
       $defaults[$message_field] = $dao->default_message;
+      $defaults[$subject_field] = $dao->subject;
       $form->setDefaults($defaults);
     }
   }
@@ -114,6 +118,7 @@ function petitionemail_civicrm_buildForm( $formName, &$form ) {
       $sql = "SELECT petition_id, 
                 default_message, 
                 message_field, 
+                subject_field,
                 subject,
                 recipients,
                 location_type_id
@@ -128,6 +133,7 @@ function petitionemail_civicrm_buildForm( $formName, &$form ) {
         $defaults['recipients'] = $dao->recipients;
         $defaults['default_message'] = $dao->default_message;
         $defaults['message_field'] = $dao->message_field;
+        $defaults['subject_field'] = $dao->subject_field;
         $defaults['subject'] = $dao->subject;
         $defaults['location_type_id'] = $dao->location_type_id;
         
@@ -176,17 +182,17 @@ function petitionemail_civicrm_buildForm( $formName, &$form ) {
         $profile_ids[] = $join_value['uf_group_id'];
       }
     }
-    $custom_fields = petitionemail_get_textarea_fields($profile_ids);
+    $custom_fields = petitionemail_get_text_fields($profile_ids);
     
-    $custom_message_field_options = array();
+    $custom_field_options = array();
     if(count($custom_fields) == 0) {
-      $custom_message_field_options = array(
+      $custom_field_options = array(
         '' => t('- No Text or TextArea fields defined in your profiles -')
       );
     }
     else {
-      $custom_message_field_options = array('' => t('- Select -'));
-      $custom_message_field_options = $custom_message_field_options + $custom_fields;
+      $custom_field_options = array('' => t('- Select -'));
+      $custom_field_options = $custom_field_options + $custom_fields;
     }
     $choose_one = array('0' => ts('--choose one--'));
     $group_options = $choose_one + CRM_Core_PseudoConstant::group('Mailing');
@@ -219,9 +225,11 @@ function petitionemail_civicrm_buildForm( $formName, &$form ) {
     $form->add('select', 'location_type_id', ts('Email'), $location_options);
     $form->add('textarea', 'recipients', ts("Send petitions to"));
     $form->add('select', 'message_field', ts('Custom Message Field'),
-      $custom_message_field_options);
+      $custom_field_options);
+    $form->add('select', 'subject_field', ts('Custom Subject Field'),
+      $custom_field_options);
     $form->add('textarea', 'default_message', ts('Default Message'), 'rows=20');
-    $form->add('text', 'subject', ts('Email Subject Line'), array('size' => 70));
+    $form->add('text', 'subject', ts('Default Email Subject Line'), array('size' => 70));
     $form->add('textarea', 'links', ts('Links to sign the petition'), 'rows=5')->freeze();
     
  
@@ -371,7 +379,7 @@ function petitionemail_civicrm_validateForm($formName, &$fields, &$files, &$form
 /**
  * Given an array of profile ids, list all text area fields
  */
-function petitionemail_get_textarea_fields($profile_ids) {
+function petitionemail_get_text_fields($profile_ids) {
   // Now get all fields in this profile
   $custom_fields = array();
   while(list(,$uf_group_id) = each($profile_ids)) {
@@ -435,6 +443,7 @@ function petitionemail_civicrm_postProcess( $formName, &$form ) {
 
     $default_message =  $form->_submitValues['default_message'];
     $message_field = $form->_submitValues['message_field'];
+    $subject_field = $form->_submitValues['subject_field'];
     $subject = $form->_submitValues['subject'];
     $recipients = $form->_submitValues['recipients'];
     $location_type_id = $form->_submitValues['location_type_id'];
@@ -443,6 +452,7 @@ function petitionemail_civicrm_postProcess( $formName, &$form ) {
              petition_id,
              default_message, 
              message_field, 
+             subject_field, 
              subject,
              recipients,
              location_type_id
@@ -452,15 +462,17 @@ function petitionemail_civicrm_postProcess( $formName, &$form ) {
              %3, 
              %4,
              %5,
-             %6
+             %6,
+             %7
     )";
     $params = array( 
       1 => array( $survey_id, 'Integer' ),
       2 => array( $default_message, 'String' ),
       3 => array( $message_field, 'String' ),
-      4 => array( $subject, 'String' ),
-      5 => array( $recipients, 'String' ),
-      6 => array( $location_type_id, 'Integer' ),
+      4 => array( $subject_field, 'String' ),
+      5 => array( $subject, 'String' ),
+      6 => array( $recipients, 'String' ),
+      7 => array( $location_type_id, 'Integer' ),
     );
     $petitionemail = CRM_Core_DAO::executeQuery( $sql, $params );
     
@@ -532,6 +544,7 @@ function petitionemail_get_petition_details($petition_id) {
   $ret = array();
   $sql = "SELECT default_message, 
                message_field, 
+               subject_field,
                subject,
                location_type_id,
                recipients
@@ -550,6 +563,7 @@ function petitionemail_get_petition_details($petition_id) {
   $ret['subject'] = $petition_email->subject;
   $ret['location_type_id'] = $petition_email->location_type_id;
   $ret['message_field'] = $petition_email->message_field;
+  $ret['subject_field'] = $petition_email->subject_field;
   $ret['recipients'] = $petition_email->recipients;
 
   // Now retrieve the matching fields, if any
@@ -577,27 +591,46 @@ function petitionemail_process_signature($activity_id) {
     return;
   }
   $default_message = $petition_vars['default_message'];
-  $subject = $petition_vars['subject'];
+  $default_subject = $petition_vars['subject'];
   $message_field = $petition_vars['message_field'];
+  $subject_field = $petition_vars['subject_field'];
 
-  // Figure out whether to use the user-supplied message or the default
-  // message.
+  // Figure out whether to use the user-supplied message/subject or the default
+  // message/subject.
   $petition_message = NULL;
+  $subject = NULL;
   // If the petition has specified a message field
   if(!empty($message_field)) {
     // Retrieve the value of the field for this activity
-    $params = array('id' => $activity_id, 
-      'return' => array($message_field, 'activity_type_id'));
+    $params = array(
+      'id' => $activity_id, 
+      'return' => $message_field
+    );
     $result = civicrm_api3('Activity', 'getsingle', $params);
     if(!empty($result[$message_field])) {
       $petition_message = $result[$message_field];
     }
   } 
-
-  // No user supplied message, use the default
+  // If the petition has specified a subject field
+  if(!empty($subject_field)) {
+    // Retrieve the value of the field for this activity
+    $params = array(
+      'id' => $activity_id, 
+      'return' => $subject_field
+    );
+    $result = civicrm_api3('Activity', 'getsingle', $params);
+    if(!empty($result[$subject_field])) {
+      $subject = $result[$subject_field];
+    }
+  }
+  // No user supplied message/subject, use the default
   if(is_null($petition_message)) {
     $petition_message = $default_message;
   }
+  if(is_null($subject)) {
+    $subject = $default_subject;
+  }
+
   $activity = civicrm_api3("Activity", "getsingle", array ('id' => $activity_id));
   $contact_id = $activity['source_contact_id'];
   $contact = civicrm_api3("Contact", "getsingle", array ('id' => $contact_id));

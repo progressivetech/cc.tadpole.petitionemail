@@ -142,10 +142,22 @@ function petitionemail_civicrm_buildForm( $formName, &$form ) {
           $defaults['matching_group_id' . $i] = $dao->matching_group_id;
           $i++;
         }
+        // We have to build this URL by hand to avoid having the curly 
+        // braces get escaped.
+        $base_url = CIVICRM_UF_BASEURL . "civicrm/petition/sign?sid=$survey_id&reset=1";
+        $personal_url = $base_url . '&{contact.checksum}&cid={contact.contact_id}';
+        $defaults['links'] = ts("Personal link (use this link if you are sending it via PowerBase Mail, it will auto fill with the user's address): ") . "\n" . 
+          $personal_url . "\n\n" .  ts("General link: ") . $base_url;
         $form->setDefaults($defaults);
       }
     }
-
+    else {
+      $form->setDefaults(
+        array(
+          'links' => ts("Please save the petition first, then you can copy and paste the link to sign the petition.")
+        )
+      );
+    }
     // Now add our extra fields to the form.
     $form->add('checkbox', 'email_petition', ts('Send an email to a target'));
 
@@ -210,6 +222,9 @@ function petitionemail_civicrm_buildForm( $formName, &$form ) {
       $custom_message_field_options);
     $form->add('textarea', 'default_message', ts('Default Message'), 'rows=20');
     $form->add('text', 'subject', ts('Email Subject Line'), array('size' => 70));
+    $form->add('textarea', 'links', ts('Links to sign the petition'), 'rows=5');
+    
+ 
   }
 }
 

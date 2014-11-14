@@ -13,7 +13,7 @@
        <td class="view-value">{$form.default_message.html}
       <div class="description">{ts}Enter the default message to be included in the email.{/ts}</div></td>
    </tr>
-  <tr class="crm-campaign-survey-form-block-message_field">
+   <tr class="crm-campaign-survey-form-block-message_field">
        <td class="label">{$form.message_field.label}</td>
        <td class="view-value">{$form.message_field.html}
       <div class="description">{ts}Select a field that will have the signer's custom message.  Make sure it is included in the Activity Profile you selected.{/ts}</div></td>
@@ -74,5 +74,10 @@
          </div>
        </td>
    </tr>
-  
+   <tr class="crm-campaign-survey-form-block-links_field">
+       <td class="label">{$form.links.label}</td>
+       <td class="view-value">{$form.links.html}
+      <div class="description">{ts}Sending an email to publicize this petition? Here are your links!{/ts}</div></td>
+   </tr>
+
       

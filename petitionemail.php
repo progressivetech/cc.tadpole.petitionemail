@@ -146,7 +146,7 @@ function petitionemail_civicrm_buildForm( $formName, &$form ) {
         // braces get escaped.
         $base_url = CIVICRM_UF_BASEURL . "civicrm/petition/sign?sid=$survey_id&reset=1";
         $personal_url = $base_url . '&{contact.checksum}&cid={contact.contact_id}';
-        $defaults['links'] = ts("Personal link (use this link if you are sending it via PowerBase Mail, it will auto fill with the user's address): ") . "\n" . 
+        $defaults['links'] = ts("Personal link (use this link if you are sending it via CiviMail, it will auto fill with the user's address): ") . "\n" . 
           $personal_url . "\n\n" .  ts("General link: ") . $base_url;
         $form->setDefaults($defaults);
       }

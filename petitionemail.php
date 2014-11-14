@@ -208,8 +208,8 @@ function petitionemail_civicrm_buildForm( $formName, &$form ) {
     $form->add('textarea', 'recipients', ts("Send petitions to"));
     $form->add('select', 'message_field', ts('Custom Message Field'),
       $custom_message_field_options);
-    $form->add('textarea', 'default_message', ts('Default Message'));
-    $form->add('text', 'subject', ts('Email Subject Line'));
+    $form->add('textarea', 'default_message', ts('Default Message'), 'rows=20');
+    $form->add('text', 'subject', ts('Email Subject Line'), array('size' => 70));
   }
 }
 

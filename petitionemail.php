@@ -331,12 +331,6 @@ function petitionemail_civicrm_validateForm($formName, &$fields, &$files, &$form
         }
         $i++;
       }
-      $location_type_id = CRM_Utils_Array::value('location_type_id', $fields);
-      if(empty($location_type_id) && $using_dynamic_method) {
-        $msg = ts("If you are using the dynamic method to choose a target group
-          and field, you must also select an email address location.");
-        $errors['location_type_id'] = $msg; 
-      }
 
       // If additional email targets have been provided, make sure they are
       // all syntactically correct.
@@ -918,21 +912,32 @@ function petitionemail_get_recipients($contact_id, $petition_id) {
       $where[] = '(' . implode(' OR ', $sub_where) . ')';
     }
 
-    // Now add the right email lookup info
-    $from[] = "JOIN civicrm_email e ON c.id = e.contact_id";
-    $where[] = 'e.location_type_id = %' . $id;
-    $params[$id] = array($petition_vars['location_type_id'], 'Integer');
-
     // put it all together
-    $sql = "SELECT DISTINCT c.id, c.display_name, e.email ";
+    $sql = "SELECT DISTINCT c.id, c.display_name ";
     $sql .= "FROM " . implode("\n", $from) . " ";
     $sql .= "WHERE " . implode(" AND\n", $where);
     $dao = CRM_Core_DAO::executeQuery($sql, $params);
+    $location_type_id = $petition_vars['location_type_id'];
     while($dao->fetch()) {
+      // Lookup the best email address. 
+      // ORDER BY FIELD allows us to arbitrarily set the location type id
+      // we want to be set the highest.
+      $sql = "SELECT e.email FROM civicrm_email e WHERE contact_id = %0 ".
+        "AND (location_type_id = %1 OR is_primary = 1) ".
+        "ORDER BY FIELD(e.location_type_id, %2) DESC, e.is_primary LIMIT 1";
+      
+      $email_params = array(
+        0 => array($dao->id, 'Integer'),
+        1 => array($petition_vars['location_type_id'], 'Integer'),
+        2 => array($petition_vars['location_type_id'], 'Integer')
+      );
+      
+      $email_dao = CRM_Core_DAO::executeQuery($sql, $email_params);
+      $email_dao->fetch();
       $ret[] = array(
         'contact_id' => $dao->id,
         'name' => $dao->display_name,
-        'email' => $dao->email
+        'email' => $email_dao->email
       );
     }
   }

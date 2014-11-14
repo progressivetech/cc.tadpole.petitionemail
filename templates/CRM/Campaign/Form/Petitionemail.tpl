@@ -63,7 +63,7 @@
            </table>
            <div class="label">{$form.location_type_id.label}</div>
            <div class="view-value">{$form.location_type_id.html}</div>
-           <div class="description">{ts}A target contact can have more than one email address. Choose the email location that should be used when sending the petition{/ts}</div>
+           <div class="description">{ts}A target contact can have more than one email address. Choose the email location that should be preferred when sending the petition. If blank, or the preferred location is not available for the target, the primary email address will be used.{/ts}</div>
 
            <h3 class="petition-email-header">Static Method</h3>
 

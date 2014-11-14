@@ -69,7 +69,7 @@
 
            <div class="label">{$form.recipients.label}</div>
            <div class="view-value">{$form.recipients.html}</div>
-           <div class="description">{ts}Enter additional targets that receive copies of all petitions in the form: 'First name Last name' &lt;email@example.org&gt;. Separate multiple recipients with line breaks.{/ts}</div></td>
+           <div class="description">{ts}Enter targets that receive copies of all petitions in the form: 'First name Last name' &lt;email@example.org&gt;. Separate multiple recipients with line breaks.{/ts}</div></td>
 
          </div>
        </td>

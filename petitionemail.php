@@ -509,14 +509,29 @@ function petitionemail_civicrm_postProcess( $formName, &$form ) {
  * our tables if a petition is deleted.
  */
 function petitionemail_civicrm_post( $op, $objectName, $objectId, &$objectRef ) {
+  static $profile_fields = NULL;
+  if($objectName == 'Profile' && is_array($objectRef)) {
+    // This is hacky but seems to be unavoidable. We really want to run 
+    // on the activity post create hook. However, the activity post create
+    // hook is called *before* the custom fields are saved for the activity
+    // record. That means that none of the custom fields are available when
+    // it is called, so we can't provide a custom subject or custom message
+    // field to the petitionemail_process_signature function.
+    //
+    // However, the profile post hook is called before the activity post
+    // hook is called. So, we set a static variable when the profile post
+    // hook is called to save all the fields being submitted and then make
+    // that available when the activity post hook is called.
+    $profile_fields = $objectRef;
+  }
   if ($objectName == 'Activity') {
     $activity_id = $objectId;
 
-    // Only run on creation. For petition that require a confirmation,
+    // Only run on creation. For petitions that require a confirmation,
     // after the petition has been created, see petitionemail_civicrm_pageRun().
     if($op == 'create') {
       if(petitionemail_is_actionable_activity($activity_id)) {
-        petitionemail_process_signature($activity_id);
+        petitionemail_process_signature($activity_id, $profile_fields);
       }
     }
   }
@@ -578,7 +593,14 @@ function petitionemail_get_petition_details($petition_id) {
   return $ret;
 }
 
-function petitionemail_process_signature($activity_id) {
+/**
+ * This function handles all petition signature processing.
+ *
+ * @activity_id integer The activity id of the signature activity
+ * @profile_fields array An array of fields submitted by the user, which
+ *   may include the custom subject and custom message values.
+ */
+function petitionemail_process_signature($activity_id, $profile_fields = NULL) {
   $petition_id = petitionemail_get_petition_id_for_activity($activity_id);
   if(empty($petition_id)) {
     $log = "Failed to find petition id for activity id: $activity_id";
@@ -601,32 +623,52 @@ function petitionemail_process_signature($activity_id) {
   $subject = NULL;
   // If the petition has specified a message field
   if(!empty($message_field)) {
-    // Retrieve the value of the field for this activity
-    $params = array(
-      'id' => $activity_id, 
-      'return' => $message_field
-    );
-    $result = civicrm_api3('Activity', 'getsingle', $params);
-    if(!empty($result[$message_field])) {
-      $petition_message = $result[$message_field];
+    // Check for a custom message field value in the passed in profile fields.
+    // This field will be populated if we are operating on a new activity via
+    // the post hook.
+    if(is_array($profile_fields) && !empty($profile_fields[$message_field])) {
+      $petition_message = $profile_fields[$message_field];
+    }
+    else {
+      // Retrieve the value of the field for this activity (this may happen
+      // if we are operating on a confirmation click from pageRun hook).
+      $params = array(
+        'id' => $activity_id, 
+        'return' => $message_field
+      );
+      $result = civicrm_api3('Activity', 'getsingle', $params);
+      if(!empty($result[$message_field])) {
+        $petition_message = $result[$message_field];
+      }
     }
   } 
-  // If the petition has specified a subject field
-  if(!empty($subject_field)) {
-    // Retrieve the value of the field for this activity
-    $params = array(
-      'id' => $activity_id, 
-      'return' => $subject_field
-    );
-    $result = civicrm_api3('Activity', 'getsingle', $params);
-    if(!empty($result[$subject_field])) {
-      $subject = $result[$subject_field];
-    }
-  }
-  // No user supplied message/subject, use the default
   if(is_null($petition_message)) {
     $petition_message = $default_message;
   }
+
+  // If the petition has specified a subject field
+  if(!empty($subject_field)) {
+    // Check for a custom subject field value in the passed in profile fields.
+    // This field will be populated if we are operating on a new activity via
+    // the post hook.
+    if(is_array($profile_fields) && !empty($profile_fields[$subject_field])) {
+      $subject = $profile_fields[$subject_field];
+    }
+    else {
+      // Retrieve the value of the field for this activity (this may happen
+      // if we are operating on a confirmation click from pageRun hook).
+      $params = array(
+        'id' => $activity_id, 
+        'return' => $subject_field
+      );
+      $result = civicrm_api3('Activity', 'getsingle', $params);
+      if(!empty($result[$subject_field])) {
+        $subject = $result[$subject_field];
+      }
+    }
+  }
+  // No user supplied message/subject, use the default
+  
   if(is_null($subject)) {
     $subject = $default_subject;
   }

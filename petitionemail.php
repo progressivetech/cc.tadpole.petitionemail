@@ -678,9 +678,7 @@ function petitionemail_process_signature($activity_id, $profile_fields = NULL) {
   $contact = civicrm_api3("Contact", "getsingle", array ('id' => $contact_id));
 
   $from = NULL;
-  if (array_key_exists('email', $contact) && !empty($contact['email'])) {
-    $from = $contact['display_name'] . ' <' . $contact['email'] . '>';
-  } else {
+  if (empty($contact['email'])) {
     $domain = civicrm_api3("Domain", "get", array ());
     if ($domain['is_error'] != 0 || !is_array($domain['values'])) { 
       // Can't send email without a from address.
@@ -689,9 +687,9 @@ function petitionemail_process_signature($activity_id, $profile_fields = NULL) {
       CRM_Core_Error::debug_log_message($msg);
       return; 
     }
-    $from = '"' . $contact['display_name'] . '"' . ' <' .
-      $domain['values']['from_email'] . '>';
+    $contact['email'] = $domain['values']['from_email'];
   }
+  $from = $contact['display_name'] . ' <' . $contact['email'] . '>';
 
   // Setup email message (except to address)
   $email_params = array( 
@@ -705,6 +703,9 @@ function petitionemail_process_signature($activity_id, $profile_fields = NULL) {
 
   // Get array of recipients
   $recipients = petitionemail_get_recipients($contact_id, $petition_id);
+  // Keep track of the targets we actually send the message to so we can 
+  // email the petition signer to let them now.
+  $message_sent_to = array();
   while(list(, $recipient) = each($recipients)) {
     if(!empty($recipient['email'])) {
       $log = "petition email: contact id ($contact_id) sending to email (" .
@@ -741,9 +742,11 @@ function petitionemail_process_signature($activity_id, $profile_fields = NULL) {
         $activity_id = array_pop($ret);
         $status = array_pop($ret);
         if($status === TRUE) {
-          CRM_Core_Session::setStatus( ts('Message sent successfully to') . "$emailAddress", '', 'success' );
+          $to = $recipient['name'] . ' <' . $emailAddress . '>';
+          CRM_Core_Session::setStatus( ts('Message sent successfully to: ') . htmlentities($to), '', 'success' );
           $log = "petition email: email sent successfully";
           CRM_Core_Error::debug_log_message($log);
+          $message_sent_to[] = $to;
 
           // Update the activity with the petition id so we can properly
           // report on the email messages sent as a result of this petition.
@@ -768,7 +771,7 @@ function petitionemail_process_signature($activity_id, $profile_fields = NULL) {
         // Handle targets not in the database.
         $email_params['toName'] = $recipient['name'];
         $email_params['toEmail'] = $recipient['email'];
-        $to = $email_params['toName'] . ' ' . $email_params['toEmail'];
+        $to = $email_params['toName'] . ' <' . $email_params['toEmail'] . '>';
 
         $log = "petition_email: sending petition to '$to' via mail function.";
         CRM_Core_Error::debug_log_message($log);
@@ -776,16 +779,34 @@ function petitionemail_process_signature($activity_id, $profile_fields = NULL) {
         $success = CRM_Utils_Mail::send($email_params);
 
         if($success == 1) {
-          CRM_Core_Session::setStatus( ts('Message sent successfully to') . "$to", '', 'success' );
+          CRM_Core_Session::setStatus( ts('Message sent successfully to: ') . htmlentities($to), '', 'success' );
           $log = "petition_email: message sent.";
+          $message_sent_to[] = $to;
         } else {
           $log = "petition_email: message was not sent.";
-          CRM_Core_Session::setStatus( ts('Error sending message to') . "$to" );
         }
         CRM_Core_Error::debug_log_message($log);
       }
     }
   }
+  // Now send a copy to the petition signer, that tells them who it was
+  // sent to.
+  $prepend_msg = ts("Below is a copy of your message. It was sent to the following people.") . "\n\n" .
+    implode("\n", $message_sent_to);
+
+  // Modify our email_params to send to the petition signer.
+  $email_params['toEmail'] = $contact['email'];
+  $email_params['toName'] = $contact['display_name'];
+  $email_params['text'] = $prepend_msg . "\n\n---------\n\n" . $email_params['text'];
+
+  $success = CRM_Utils_Mail::send($email_params);
+
+  if($success == 1) {
+    $log = "petition_email: message sent to petition signer.";
+  } else {
+    $log = "petition_email: message not sent to petition signer.";
+  }
+  CRM_Core_Error::debug_log_message($log);
 }
  
 /**

@@ -741,6 +741,7 @@ function petitionemail_process_signature($activity_id, $profile_fields = NULL) {
         $activity_id = array_pop($ret);
         $status = array_pop($ret);
         if($status === TRUE) {
+          CRM_Core_Session::setStatus( ts('Message sent successfully to') . "$emailAddress", '', 'success' );
           $log = "petition email: email sent successfully";
           CRM_Core_Error::debug_log_message($log);
 

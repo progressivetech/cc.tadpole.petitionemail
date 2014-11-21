@@ -223,12 +223,12 @@ function petitionemail_civicrm_buildForm( $formName, &$form ) {
       $i++;
     }
     $form->add('select', 'location_type_id', ts('Email'), $location_options);
-    $form->add('textarea', 'recipients', ts("Send petitions to"));
+    $form->add('textarea', 'recipients', ts("Send petitions to"), 'rows=20 cols=100');
     $form->add('select', 'message_field', ts('Custom Message Field'),
       $custom_field_options);
     $form->add('select', 'subject_field', ts('Custom Subject Field'),
       $custom_field_options);
-    $form->add('textarea', 'default_message', ts('Default Message'), 'rows=20');
+    $form->add('textarea', 'default_message', ts('Default Message'), 'rows=20 cols=100');
     $form->add('text', 'subject', ts('Default Email Subject Line'), array('size' => 70));
     $form->add('textarea', 'links', ts('Links to sign the petition'), 'rows=5')->freeze();
     

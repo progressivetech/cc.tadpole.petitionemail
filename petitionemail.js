@@ -33,17 +33,17 @@ function populateUserFieldOptions() {
 }
 
 function showHideEmailPetition() {
-  if( cj("input#email_petition").attr("checked") ) {
-    cj("tr.crm-campaign-survey-form-block-location_type_id").show("fast");
-    cj("tr.crm-campaign-survey-form-block-recipient_options").show("fast");
-    cj("tr.crm-campaign-survey-form-block-message_field").show("fast");
-    cj("tr.crm-campaign-survey-form-block-default_message").show("fast");
+  if( cj("input#email_petition:checked").length == 1 ) {
     cj("tr.crm-campaign-survey-form-block-subject").show("fast");
+    cj("tr.crm-campaign-survey-form-block-subject_field").show("fast");
+    cj("tr.crm-campaign-survey-form-block-default_message").show("fast");
+    cj("tr.crm-campaign-survey-form-block-message_field").show("fast");
+    cj("tr.crm-campaign-survey-form-block-recipient_options").show("fast");
   } else {
-    cj("tr.crm-campaign-survey-form-block-location_type_id").hide("fast");
-    cj("tr.crm-campaign-survey-form-block-recipient_options").hide("fast");
-    cj("tr.crm-campaign-survey-form-block-message_field").hide("fast");
-    cj("tr.crm-campaign-survey-form-block-default_message").hide("fast");
     cj("tr.crm-campaign-survey-form-block-subject").hide("fast");
+    cj("tr.crm-campaign-survey-form-block-subject_field").hide("fast");
+    cj("tr.crm-campaign-survey-form-block-default_message").hide("fast");
+    cj("tr.crm-campaign-survey-form-block-message_field").hide("fast");
+    cj("tr.crm-campaign-survey-form-block-recipient_options").hide("fast");
   }
 }

@@ -150,7 +150,8 @@ function petitionemail_civicrm_buildForm( $formName, &$form ) {
         }
         // We have to build this URL by hand to avoid having the curly 
         // braces get escaped.
-        $base_url = CIVICRM_UF_BASEURL . "civicrm/petition/sign?sid=$survey_id&reset=1";
+        $base_url = preg_match('#/$#', CIVICRM_UF_BASEURL) ? CIVICRM_UF_BASEURL : CIVICRM_UF_BASEURL . '/';
+        $base_url = $base_url . "civicrm/petition/sign?sid=$survey_id&reset=1";
         $personal_url = $base_url . '&{contact.checksum}&cid={contact.contact_id}';
         $defaults['links'] = ts("Personal link (use this link if you are sending it via CiviMail, it will auto fill with the user's address): ") . "\n" . 
           $personal_url . "\n\n" .  ts("General link: ") . $base_url;

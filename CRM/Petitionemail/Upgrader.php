@@ -40,10 +40,10 @@ class CRM_Petitionemail_Upgrader extends CRM_Petitionemail_Upgrader_Base {
     $dao = CRM_Core_DAO::executeQuery($sql);
     while($dao->fetch()) {
       $target = '"' . $dao->recipient_name . '" <' . $dao->recipient_email . '>';
-      $sql = "UPDATE civicrm_petition_email_target SET petition_id = %0, recipients = %1";
+      $sql = "UPDATE civicrm_petition_email SET recipients = %0 WHERE petition_id = %1";
       $params = array(
-        0 => array($dao->petition_id, 'Integer'),
-        1 => array($target, 'String')
+        0 => array($target, 'String'),
+        1 => array($dao->petition_id, 'Integer'),
       );
       CRM_Core_DAO::executeQuery($sql, $params);
     }

@@ -36,6 +36,7 @@ function petitionemail_civicrm_install() {
 function petitionemail_civicrm_uninstall() {
   // Clear out our variables.
   petitionemail_remove_profiles();
+  petitionemail_remove_custom_fields();
   petitionemail_remove_variables();
   return _petitionemail_civix_civicrm_uninstall();
 }
@@ -45,7 +46,10 @@ function petitionemail_civicrm_uninstall() {
  */
 function petitionemail_civicrm_enable() {
   // Ensure the profile id is created.
-  petitionemail_get_matching_fields_profile_id();
+  petitionemail_create_custom_fields();
+  petitionemail_get_profile_id('petitionemail_profile_matching_fields');
+  petitionemail_get_profile_id('petitionemail_profile_default_contact');
+  petitionemail_get_profile_id('petitionemail_profile_default_activity');
   return _petitionemail_civix_civicrm_enable();
 }
 
@@ -153,7 +157,8 @@ function petitionemail_civicrm_buildForm( $formName, &$form ) {
         $base_url = preg_match('#/$#', CIVICRM_UF_BASEURL) ? CIVICRM_UF_BASEURL : CIVICRM_UF_BASEURL . '/';
         $base_url = $base_url . "civicrm/petition/sign?sid=$survey_id&reset=1";
         $personal_url = $base_url . '&{contact.checksum}&cid={contact.contact_id}';
-        $defaults['links'] = ts("Personal link (use this link if you are sending it via CiviMail, it will auto fill with the user's address): ") . "\n" . 
+        $defaults['links'] = ts("Personal link (use this link if you are sending it via CiviMail,
+          it will auto fill with the user's address): ") . "\n" . 
           $personal_url . "\n\n" .  ts("General link: ") . $base_url;
         $form->setDefaults($defaults);
       }
@@ -161,7 +166,8 @@ function petitionemail_civicrm_buildForm( $formName, &$form ) {
     else {
       $form->setDefaults(
         array(
-          'links' => ts("Please save the petition first, then you can copy and paste the link to sign the petition.")
+          'links' => ts("Please save the petition first, then you can copy and
+             paste the link to sign the petition.")
         )
       );
     }
@@ -211,7 +217,7 @@ function petitionemail_civicrm_buildForm( $formName, &$form ) {
     }
     $form->assign('petitionemail_matching_fields_count', $field_options_count);
     $url_params = array(
-      'gid' => petitionemail_get_matching_fields_profile_id(),
+      'gid' => petitionemail_get_profile_id('petitionemail_profile_matching_fields'),
       'action' => 'browse'
     );
     $url = CRM_Utils_System::url("civicrm/admin/uf/group/field", $url_params);
@@ -232,8 +238,6 @@ function petitionemail_civicrm_buildForm( $formName, &$form ) {
     $form->add('textarea', 'default_message', ts('Default Message'), 'rows=20 cols=100');
     $form->add('text', 'subject', ts('Default Email Subject Line'), array('size' => 70));
     $form->add('textarea', 'links', ts('Links to sign the petition'), 'rows=5')->freeze();
-    
- 
   }
 }
 
@@ -245,7 +249,7 @@ function petitionemail_civicrm_buildForm( $formName, &$form ) {
 function petitionemail_get_matching_field_options() {
   $session = CRM_Core_Session::singleton();
   $ret = array();
-  $uf_group_id = petitionemail_get_matching_fields_profile_id();
+  $uf_group_id = petitionemail_get_profile_id('petitionemail_profile_matching_fields');
   $fields = CRM_Core_BAO_UFGroup::getFields($uf_group_id); 
   $allowed = petitionemail_get_allowed_matching_fields();
   if(is_array($fields)) {
@@ -1144,20 +1148,152 @@ function petitionemail_is_actionable_activity($activity_id) {
 }
 
 /**
- * Helper function to get or create required profile
+ *  Provide profile parameters based on the keys passed. 
  *
- * This profile controls which fields can be used to match a petition 
- * signer with a petition target. We use a profile to avoid having a
- * giant list of fields presented to the user.
+ * This function returns the parameters used to create profiles
+ * in the petitionemail_get_profile_id function.
+ * 
+ **/
+function petitionemail_get_profile_params($key) {
+  $params = array();
+  if($key == 'petitionemail_profile_matching_fields') {
+    $description = ts('This profile controls which fields are available as
+      matching fields when using the petition email extension. Please do
+      not delete this profile.');
+    $params = array(
+      'name' => $key,
+      'title' => ts('Petition Email Available Matching fields'),
+      'description' => $description,
+      'created_id' => $contact_id
+    );
+  }
+  elseif($key == 'petitionemail_profile_default_contact') {
+    $description = ts('This profile was created by the petition email extension for use in petitions.');
+    $params = array (
+        'version' => 3,
+        'name' => 'Petition_Email_Contact_Info',
+        'title' => 'Petition Email Contact Info',
+        'description' => $description,
+        'is_active' => 1,
+        'api.uf_field.create' => array(
+          array(
+            'uf_group_id' => '$value.id',
+            'field_name' => 'postal_code',
+            'is_active' => 1,
+            'is_required' => 1,
+            'label' => 'Zip Code',
+            'field_type' => 'Contact',
+          ),
+          array(
+            'uf_group_id' => '$value.id',
+            'field_name' => 'state_province',
+            'is_active' => 1,
+            'is_required' => 1,
+            'label' => 'State',
+            'field_type' => 'Contact',
+          ),
+          array(
+            'uf_group_id' => '$value.id',
+            'field_name' => 'city',
+            'is_active' => 1,
+            'is_required' => 1,
+            'label' => 'City',
+            'field_type' => 'Contact',
+          ),
+          array(
+            'uf_group_id' => '$value.id',
+            'field_name' => 'street_address',
+            'is_active' => 1,
+            'is_required' => 1,
+            'label' => 'Street Address',
+            'field_type' => 'Contact',
+          ),
+          array(
+            'uf_group_id' => '$value.id',
+            'field_name' => 'email',
+            'is_active' => 1,
+            'is_required' => 1,
+            'label' => 'Email',
+            'field_type' => 'Contact',
+          ),
+          array(
+            'uf_group_id' => '$value.id',
+            'field_name' => 'last_name',
+            'is_active' => 1,
+            'is_required' => 1,
+            'label' => 'Last Name',
+            'field_type' => 'Individual',
+          ),
+           array(
+            'uf_group_id' => '$value.id',
+            'field_name' => 'first_name',
+            'is_active' => 1,
+            'is_required' => 1,
+            'label' => 'First Name',
+            'field_type' => 'Individual',
+          ),
+        )
+      );
+  }
+  elseif($key == 'petitionemail_profile_default_activity') {
+   // Lookup the custom field names we are supposed to use.
+   $sql = "SELECT id FROM civicrm_custom_field WHERE name = 'Petition_Email_Custom_Subject'";
+   $dao = CRM_Core_DAO::executeQuery($sql);
+   $dao->fetch();
+   if($dao->N == 0) {
+     // The custom fields have not yet been created.
+     return NULL;
+   }
+   $custom_subject_field = 'custom_' . $dao->id;  
+   $sql = "SELECT id FROM civicrm_custom_field WHERE name = 'Petition_Email_Custom_Message'";
+   $dao = CRM_Core_DAO::executeQuery($sql);
+   $dao->fetch();
+   if($dao->N == 0) {
+     // The custom fields have not yet been created.
+     return NULL;
+   }
+   $custom_message_field = 'custom_' . $dao->id;  
+
+   $description = ts('This profile was created by the petition email extension for use in petitions.');
+   $params = array (
+     'version' => 3,
+     'name' => 'Petition_Email_Activity_Fields',
+     'title' => 'Petition Email Activity Fields',
+     'description' => $description,
+     'is_active' => 1,
+     'api.uf_field.create' => array(
+       array(
+         'uf_group_id' => '$value.id',
+         'field_name' => $custom_message_field,
+         'is_active' => 1,
+         'is_required' => 1,
+         'label' => ts('Customize the message'),
+         'field_type' => 'Activity',
+       ),
+       array(
+         'uf_group_id' => '$value.id',
+         'field_name' => $custom_subject_field,
+         'is_active' => 1,
+         'is_required' => 1,
+         'label' => ts('Customize the email subject'),
+         'field_type' => 'Activity',
+       ),
+      )
+    );
+  }
+  return $params;
+}
+
+/**
+ * Helper function to ensure a profile is created.
  *
  * This function ensures that the profile is created and if not, it
  * creates it. 
  *
  * @return integer profile id 
  */
-function petitionemail_get_matching_fields_profile_id() {
+function petitionemail_get_profile_id($key) {
   $group = 'petitionemail';
-  $key = 'petitionemail_matching_fields';
   $ret = CRM_Core_BAO_Setting::getItem($group, $key);
   if(!empty($ret)) {
     // Ensure it exists
@@ -1194,15 +1330,11 @@ function petitionemail_get_matching_fields_profile_id() {
     }
   }
 
-  $description = ts('This profile controls which fields are available as
-    matching fields when using the petition email extension. Please do
-    not delete this profile.');
-  $params = array(
-    'name' => $key,
-    'title' => ts('Petition Email Available Matching fields'),
-    'description' => $description,
-    'created_id' => $contact_id
-  );
+  $params = petitionemail_get_profile_params($key);
+  if(is_null($params)) return NULL;
+
+  $params['created_id'] = $contact_id;
+  
   $results = civicrm_api3('UFGroup', 'create', $params);
   if($results['is_error'] != 0) {
     $session->setStatus(ts("Error creating the petition email profile group."));
@@ -1219,7 +1351,11 @@ function petitionemail_get_matching_fields_profile_id() {
  * Remove any profiles we automatically created.
  */
 function petitionemail_remove_profiles() {
-  $profiles_to_remove = array('petitionemail_matching_fields');
+  $profiles_to_remove = array(
+    'petitionemail_profile_matching_fields', 
+    'petitionemail_profile_default_contact', 
+    'petitionemail_profile_default_activity'
+  );
   while(list(,$key) = each($profiles_to_remove)) {
     $group = 'petitionemail';
     $ret = CRM_Core_BAO_Setting::getItem($group, $key);
@@ -1240,6 +1376,117 @@ function petitionemail_remove_profiles() {
       $params = array('id' => $ret);
       civicrm_api3('UFGroup', 'delete', $params);
     }
+  }
+}
+
+/**
+ * Remove any custom fields we automatically created.
+ */
+function petitionemail_remove_custom_fields() {
+  $groups_to_remove = array(
+    'petitionemail_custom_message_fields'
+  );
+  while(list(,$key) = each($groups_to_remove)) {
+    $group = 'petitionemail';
+    $ret = CRM_Core_BAO_Setting::getItem($group, $key);
+    if($ret) {
+      // Get a list of existing profile fields and remove those 
+      // first.
+      $params = array(
+        'custom_group_id' => $ret,
+        'return' => array('id')
+      );
+      $results = civicrm_api3('CustomField', 'get', $params);
+      if(is_array($results['values'])) {
+        while(list($id) = each($results['values'])) {
+          $params = array('id' => $id);
+          civicrm_api3('CustomField', 'delete', $params);
+        }
+      }
+      $params = array('id' => $ret);
+      civicrm_api3('CustomGroup', 'delete', $params);
+    }
+  }
+}
+/**
+ * Create the custom fields used to record subject and body
+ *
+ */
+function petitionemail_create_custom_fields() {
+  $group = 'petitionemail';
+  $key = 'petitionemail_custom_message_fields';
+  $ret = CRM_Core_BAO_Setting::getItem($group, $key);
+  if(!empty($ret)) {
+    // Ensure it exists
+    $sql = "SELECT id FROM civicrm_custom_group WHERE id = %0";
+    $dao = CRM_Core_DAO::executeQuery($sql, array(0 => array($ret, 'Integer')));
+    $dao->fetch();
+    if($dao->N == 1) {
+      return $ret;
+    }
+    // Delete this variable - probably the user deleted the profile not knowing
+    // what it was used for.
+    $sql = "DELETE FROM civicrm_setting WHERE group_name = %0 AND name = %1";
+    $params = array(
+      0 => array($group, 'String'),
+      1 => array($key, 'String')
+    );
+    CRM_Core_DAO::executeQuery($sql, $params);
+  }
+  // Get the value of the petition activity id so our custom group
+  // will only extend Activities of type Petition.
+  $sql = "SELECT v.value FROM civicrm_option_group g JOIN 
+    civicrm_option_value v ON g.id = v.option_group_id WHERE g.name = 'activity_type'
+    AND v.name = 'petition'";
+  $dao = CRM_Core_DAO::executeQuery($sql);
+  $dao->fetch();
+  if($dao->N > 0) {
+    $activity_type_id = $dao->value;
+    $params = array (
+      'version' => 3,
+      'name' => 'PetitionEmailMessageFields',
+      'title' => 'Petition Email Message Fields',
+      'extends' => 'Activity',
+      'extends_entity_column_value' => array($activity_type_id),
+      'style' => 'Inline',
+      'collapse_display' => 1,
+      'is_active' => 1,
+      'api.custom_field.create' => array(
+        array(
+          'custom_group_id' => '$value.id',
+          'label' => 'Custom Message',
+          'name' => 'Petition_Email_Custom_Message',
+          'data_type' => 'String',
+          'html_type' => 'TextArea',
+          'is_required' => 0,
+          'is_searchable' => 0,
+          'is_active' => 1,
+        ),
+        array(
+          'custom_group_id' => '$value.id',
+          'label' => 'Custom Subject',
+          'name' => 'Petition_Email_Custom_Subject',
+          'data_type' => 'String',
+          'html_type' => 'Text',
+          'is_required' => 0,
+          'is_searchable' => 0,
+          'is_active' => 1,
+        ),
+        
+      ),
+    );
+    try {
+      $results = civicrm_api3('CustomGroup', 'create', $params);
+    }
+    catch (CiviCRM_API3_Exception $e) {
+      $session = CRM_Core_Session::singleton();
+      $session->setStatus(ts("Error creating the petition custom fields."));
+      $session->setStatus($e->getMessage());
+      return FALSE;
+    }
+    $values = array_pop($results['values']);
+    $id = $values['id'];
+    CRM_Core_BAO_Setting::setItem($id, $group, $key);
   }
 }
 

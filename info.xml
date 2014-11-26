@@ -3,19 +3,20 @@
   <downloadUrl>http://git.palantetech.coop/tadpole/civicrm/extensions/cc.tadpole.petitionemail/</downloadUrl>
   <file>petitionemail</file>
   <name>Petition Email</name>
-  <description>Email petition signatures to a selected recipient</description>
+  <description>Email petition signatures to static or dynamic list of selected recipients</description>
   <license>AGPL</license>
   <maintainer>
     <author>Joseph Lacey</author>
     <email>joseph@palantetech.coop</email>
   </maintainer>
   <releaseDate>2013-12-16</releaseDate>
-  <version>1.0</version>
+  <version>2.0</version>
   <develStage>beta</develStage>
   <compatibility>
     <ver>4.4</ver>
+    <ver>4.5</ver>
   </compatibility>
-  <comments>This extension is a port of the Progressive Technology Project's CiviCRM Petition Email Drupal module</comments>
+  <comments>This extension is a re-write of the extension written by Palante which was a port of the Progressive Technology Project's CiviCRM Petition Email Drupal module</comments>
   <civix>
     <namespace>CRM/Petitionemail</namespace>
   </civix>

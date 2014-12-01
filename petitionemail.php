@@ -1164,7 +1164,6 @@ function petitionemail_get_profile_params($key) {
       'name' => $key,
       'title' => ts('Petition Email Available Matching fields'),
       'description' => $description,
-      'created_id' => $contact_id
     );
   }
   elseif($key == 'petitionemail_profile_default_contact') {

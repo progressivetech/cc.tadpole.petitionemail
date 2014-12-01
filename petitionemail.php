@@ -1487,6 +1487,7 @@ function petitionemail_create_custom_fields() {
     $values = array_pop($results['values']);
     $id = $values['id'];
     CRM_Core_BAO_Setting::setItem($id, $group, $key);
+    CRM_Utils_System::flushCache();
   }
 }
 

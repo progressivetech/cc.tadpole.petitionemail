@@ -1486,7 +1486,10 @@ function petitionemail_create_custom_fields() {
     $values = array_pop($results['values']);
     $id = $values['id'];
     CRM_Core_BAO_Setting::setItem($id, $group, $key);
-    CRM_Utils_System::flushCache();
+    // Force the fields list to be regenerated so we don't get an error
+    // saying that the field name is not valid when we add this field to a profile
+    // The only reason we call this is to overwrite the static variable.
+    CRM_Core_BAO_UFField::getAvailableFieldsFlat(TRUE);
   }
 }
 

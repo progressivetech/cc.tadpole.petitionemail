@@ -87,6 +87,7 @@ function petitionemail_civicrm_managed(&$entities) {
  * Implemention of hook_civicrm_buildForm
  */
 function petitionemail_civicrm_buildForm( $formName, &$form ) {
+
   if ($formName == 'CRM_Campaign_Form_Petition_Signature') {  
     $survey_id = $form->getVar('_surveyId');
     if ($survey_id) {
@@ -1486,9 +1487,21 @@ function petitionemail_create_custom_fields() {
     $values = array_pop($results['values']);
     $id = $values['id'];
     CRM_Core_BAO_Setting::setItem($id, $group, $key);
-    // Force the fields list to be regenerated so we don't get an error
-    // saying that the field name is not valid when we add this field to a profile
-    // The only reason we call this is to overwrite the static variable.
+
+    // Start complex process for clearing the cache of available fields. 
+    // We need to clear the cache so that when we create a profile that
+    // depends on these fields, we won't get an error that it's an invalid field.
+
+    // First clear the static array of exportableFields which is used to determine
+    // if a field is valid when being used in a profile.
+    CRM_Activity_BAO_Activity::$_exportableFields = NULL;
+
+    // Next clear the cache so we don't pull from an already populated cache.
+    CRM_Utils_System::flushCache();
+
+    // Lastly, we have to call the function that is called to validate fields,
+    // but specifying that we want to force the re-fecthing of fields to unset
+    // yet another static variable.
     CRM_Core_BAO_UFField::getAvailableFieldsFlat(TRUE);
   }
 }

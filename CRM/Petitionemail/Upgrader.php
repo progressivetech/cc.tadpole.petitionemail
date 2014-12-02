@@ -31,10 +31,23 @@ class CRM_Petitionemail_Upgrader extends CRM_Petitionemail_Upgrader_Base {
     // First create the new table
     if(!$this->executeSqlFile('sql/Petitionemail_matching_field_install.sql')) return FALSE;
 
-    // Now add the new recipient field
-
-    $sql = "ALTER TABLE civicrm_petition_email ADD COLUMN `recipients` text COMMENT 'The name and email address of additional targets that should receive a copy of all petitions signed, separated by line breaks.'";
+    // Now add the new recipient field if it doesn't exist.
+    $sql = "DESC civicrm_petition_email";
     $dao = CRM_Core_DAO::executeQuery($sql);
+    $needs_upgrade = TRUE;
+    while($dao->fetch()) {
+      if($dao->Field == 'recipients') {
+        $needs_upgrade = FALSE;
+      }
+    }
+
+    if($needs_upgrade) {
+      $sql = "ALTER TABLE civicrm_petition_email ADD COLUMN `recipients` text ".
+        "COMMENT 'The name and email address of additional targets that should ".
+        "receive a copy of all petitions signed, separated by line breaks.'";
+      $dao = CRM_Core_DAO::executeQuery($sql);
+    }
+
     // Now transfer the data to the new tables
     $sql = "SELECT petition_id, recipient_email, recipient_name FROM civicrm_petition_email";
     $dao = CRM_Core_DAO::executeQuery($sql);

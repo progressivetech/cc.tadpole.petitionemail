@@ -1503,7 +1503,10 @@ function petitionemail_create_custom_fields() {
     // but specifying that we want to force the re-fecthing of fields to unset
     // yet another static variable.
     CRM_Core_BAO_UFField::getAvailableFieldsFlat(TRUE);
+
+    return $id;
   }
+  return FALSE;
 }
 
 /**

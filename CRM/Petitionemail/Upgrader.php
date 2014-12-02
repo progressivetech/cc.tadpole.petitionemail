@@ -89,6 +89,7 @@ class CRM_Petitionemail_Upgrader extends CRM_Petitionemail_Upgrader_Base {
     petitionemail_get_profile_id('petitionemail_profile_matching_fields');
     petitionemail_get_profile_id('petitionemail_profile_default_contact');
     petitionemail_get_profile_id('petitionemail_profile_default_activity');
+    return TRUE;
   }
 
 }

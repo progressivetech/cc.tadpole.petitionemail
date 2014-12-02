@@ -80,4 +80,15 @@ class CRM_Petitionemail_Upgrader extends CRM_Petitionemail_Upgrader_Base {
     return TRUE;
   }
 
+  /**
+   * Ensure all profiles and custom fields are created.
+   */
+  function upgrade_1003() {
+    // These are indempotent.
+    petitionemail_create_custom_fields();
+    petitionemail_get_profile_id('petitionemail_profile_matching_fields');
+    petitionemail_get_profile_id('petitionemail_profile_default_contact');
+    petitionemail_get_profile_id('petitionemail_profile_default_activity');
+  }
+
 }

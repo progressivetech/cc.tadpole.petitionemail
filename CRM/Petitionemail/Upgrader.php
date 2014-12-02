@@ -35,9 +35,14 @@ class CRM_Petitionemail_Upgrader extends CRM_Petitionemail_Upgrader_Base {
     $sql = "DESC civicrm_petition_email";
     $dao = CRM_Core_DAO::executeQuery($sql);
     $needs_upgrade = TRUE;
+    $needs_transfer = FALSE;
     while($dao->fetch()) {
       if($dao->Field == 'recipients') {
         $needs_upgrade = FALSE;
+      }
+      if($dao->Field == 'recipient_email') {
+        $needs_transfer = TRUE;
+
       }
     }
 
@@ -49,16 +54,18 @@ class CRM_Petitionemail_Upgrader extends CRM_Petitionemail_Upgrader_Base {
     }
 
     // Now transfer the data to the new tables
-    $sql = "SELECT petition_id, recipient_email, recipient_name FROM civicrm_petition_email";
-    $dao = CRM_Core_DAO::executeQuery($sql);
-    while($dao->fetch()) {
-      $target = '"' . $dao->recipient_name . '" <' . $dao->recipient_email . '>';
-      $sql = "UPDATE civicrm_petition_email SET recipients = %0 WHERE petition_id = %1";
-      $params = array(
-        0 => array($target, 'String'),
-        1 => array($dao->petition_id, 'Integer'),
-      );
-      CRM_Core_DAO::executeQuery($sql, $params);
+    if($needs_transfer) {
+      $sql = "SELECT petition_id, recipient_email, recipient_name FROM civicrm_petition_email";
+      $dao = CRM_Core_DAO::executeQuery($sql);
+      while($dao->fetch()) {
+        $target = '"' . $dao->recipient_name . '" <' . $dao->recipient_email . '>';
+        $sql = "UPDATE civicrm_petition_email SET recipients = %0 WHERE petition_id = %1";
+        $params = array(
+          0 => array($target, 'String'),
+          1 => array($dao->petition_id, 'Integer'),
+        );
+        CRM_Core_DAO::executeQuery($sql, $params);
+      }
     }
     // Now drop/add fields.
     if(!$this->executeSqlFile('sql/Petitionemail_1001_upgrade.sql')) return FALSE;

@@ -918,13 +918,10 @@ function petitionemail_get_recipients($contact_id, $petition_id) {
       }
       $location_name = $field_pieces['location_name'];
       $field_name = $field_pieces['field_name'];
+      // NOTE: we only work with primary fields.
       if($location_name == 'Primary' && array_key_exists($field_name, $contact)) {
-        // We have to unset the field that was saved as fieldname-locatiname
-        unset($matching_fields[$matching_field]);
-
-        // And now set the proper key
-        $matching_field = $field_name;
-        $matching_fields[$matching_field] = $contact[$matching_field];
+        // The field name returned by the API won't have the -location part.
+        $matching_fields[$matching_field] = $contact[$field_name];
         continue;
       }
       else {

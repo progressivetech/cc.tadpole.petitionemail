@@ -1007,11 +1007,15 @@ function petitionemail_get_recipients($contact_id, $petition_id) {
           }
           else {
             // Handle non-custom fields (address fields)
+            // We only support primary address.
+            $field_pieces = petitionemail_split_address_field($matching_field);
+            $field_name = $field_pieces['field_name'];
             if(!in_array('civicrm_address', $added_tables)) {
               $from[] = "LEFT JOIN civicrm_address a ON a.contact_id = c.id";
               $added_tables[] = 'civicrm_address';
             }
-            $field_where[] = '(' . $matching_field . ' = %' . $id . ')';
+            $where_fragment[] = $field_name . ' = %' . $id;
+            $where_fragment[] = 'a.is_primary = 1';
             $params[$id] = array($value, 'String');
             $id++;
           }

@@ -718,8 +718,12 @@ function petitionemail_process_signature($activity_id, $profile_fields = NULL) {
         $recipient['email'] . ")";
       CRM_Core_Error::debug_log_message($log);
       if(!empty($recipient['contact_id'])) {
-        // Since we're sending to a recipient in the database, create this
-        // as an email activity so we record it properly.
+        // Since we're sending to a recipient in the database, create an
+        // email activity. Note: we are not using the built-in
+        // function to create (and send) and email activity because it won't
+        // send if the contact has DoNotEmail they won't get it. However, it's
+        // normal to have DoNotEmail for your targets, but you still want them
+        // to get the petition.
 
         $log = "petition email: recording email as activity against ".
           "target contact id: " . $recipient['contact_id'];
@@ -739,21 +743,32 @@ function petitionemail_process_signature($activity_id, $profile_fields = NULL) {
         $bcc = NULL;
         $contactIds = array($recipient['contact_id']);
 
-        // Create/Send away.
-        $ret = CRM_Activity_BAO_Activity::sendEmail(
-          $contactDetails, $subject, $text, $html, $emailAddress, $userID,
-          $from, $attachments, $cc, $bcc, $contactIds
+        // Create the activity first, then we will send the email.
+        $activityTypes = CRM_Core_PseudoConstant::activityType(TRUE, TRUE, FALSE, 'name');
+        $activity_type_id = array_search('Email', $activityTypes);
+        $activity_status = CRM_Core_PseudoConstant::activityStatus();
+        $status_id = array_search('Completed', $activity_status);
+        $params = array(
+          'activity_type_id' => $activity_type_id,
+          'subject' => $subject,
+          'details' => $text,
+          'source_contact_id' => $contact_id,
+          'target_contact_id' => $recipient['contact_id'],
+          'status_id' => $status_id
         );
-
-        $activity_id = array_pop($ret);
-        $status = array_pop($ret);
-        if($status === TRUE) {
-          $to = $recipient['name'] . ' <' . $emailAddress . '>';
-          CRM_Core_Session::setStatus( ts('Message sent successfully to: ') . htmlentities($to), '', 'success' );
-          $log = "petition email: email sent successfully";
+        $activity_id = NULL;
+        try {
+          $ret = civicrm_api3('Activity', 'create', $params);
+          $value = array_pop($ret['values']);
+          $activity_id = $value['id']; 
+        }
+        catch (CiviCRM_API3_Exception $e) {
+          $log = "petition email: email activity not created";
+          $log .= $e->getMessage();
           CRM_Core_Error::debug_log_message($log);
-          $message_sent_to[] = $to;
-
+          return FALSE;
+        }
+        if($activity_id) {
           // Update the activity with the petition id so we can properly
           // report on the email messages sent as a result of this petition.
           $params = array(
@@ -767,32 +782,26 @@ function petitionemail_process_signature($activity_id, $profile_fields = NULL) {
             CRM_Core_Error::debug_log_message($log);
           }
         }
-        else {
-          $log = "petition email: failed to send email as activity.";
-          CRM_Core_Error::debug_log_message($log);
-          CRM_Core_Error::debug_log_message(print_r($ret, TRUE));
-        }
       }
-      else {
-        // Handle targets not in the database.
-        $email_params['toName'] = $recipient['name'];
-        $email_params['toEmail'] = $recipient['email'];
-        $to = $email_params['toName'] . ' <' . $email_params['toEmail'] . '>';
+      // Now send all email.
+      // Handle targets not in the database.
+      $email_params['toName'] = $recipient['name'];
+      $email_params['toEmail'] = $recipient['email'];
+      $to = $email_params['toName'] . ' <' . $email_params['toEmail'] . '>';
 
-        $log = "petition_email: sending petition to '$to' via mail function.";
-        CRM_Core_Error::debug_log_message($log);
+      $log = "petition_email: sending petition to '$to' via mail function.";
+      CRM_Core_Error::debug_log_message($log);
 
-        $success = CRM_Utils_Mail::send($email_params);
+      $success = CRM_Utils_Mail::send($email_params);
 
-        if($success == 1) {
-          CRM_Core_Session::setStatus( ts('Message sent successfully to: ') . htmlentities($to), '', 'success' );
-          $log = "petition_email: message sent.";
-          $message_sent_to[] = $to;
-        } else {
-          $log = "petition_email: message was not sent.";
-        }
-        CRM_Core_Error::debug_log_message($log);
+      if($success == 1) {
+        CRM_Core_Session::setStatus( ts('Message sent successfully to: ') . htmlentities($to), '', 'success' );
+        $log = "petition_email: message sent.";
+        $message_sent_to[] = $to;
+      } else {
+        $log = "petition_email: message was not sent.";
       }
+      CRM_Core_Error::debug_log_message($log);
     }
   }
   // Now send a copy to the petition signer, that tells them who it was

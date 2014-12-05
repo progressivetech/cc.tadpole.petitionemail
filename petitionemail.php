@@ -1448,7 +1448,7 @@ function petitionemail_create_custom_fields() {
           'custom_group_id' => '$value.id',
           'label' => 'Custom Message',
           'name' => 'Petition_Email_Custom_Message',
-          'data_type' => 'String',
+          'data_type' => 'Memo',
           'html_type' => 'TextArea',
           'is_required' => 0,
           'is_searchable' => 0,

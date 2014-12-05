@@ -804,24 +804,6 @@ function petitionemail_process_signature($activity_id, $profile_fields = NULL) {
       CRM_Core_Error::debug_log_message($log);
     }
   }
-  // Now send a copy to the petition signer, that tells them who it was
-  // sent to.
-  $prepend_msg = ts("Below is a copy of your message. It was sent to the following people.") . "\n\n" .
-    implode("\n", $message_sent_to);
-
-  // Modify our email_params to send to the petition signer.
-  $email_params['toEmail'] = $contact['email'];
-  $email_params['toName'] = $contact['display_name'];
-  $email_params['text'] = $prepend_msg . "\n\n---------\n\n" . $email_params['text'];
-
-  $success = CRM_Utils_Mail::send($email_params);
-
-  if($success == 1) {
-    $log = "petition_email: message sent to petition signer.";
-  } else {
-    $log = "petition_email: message not sent to petition signer.";
-  }
-  CRM_Core_Error::debug_log_message($log);
 }
  
 /**

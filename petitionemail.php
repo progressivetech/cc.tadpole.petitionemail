@@ -655,6 +655,10 @@ function petitionemail_process_signature($activity_id, $profile_fields = NULL) {
   if(is_null($petition_message)) {
     $petition_message = $default_message;
   }
+  // CiviCRM seems to htmlentitize everything submitted, but we are
+  // preventing any html tags in our validation and we want to avoid
+  // weird htmlentites being added to text messages. 
+  $petition_message = html_entity_decode($petition_message);
 
   // Add the sending contacts address info
   $address_block = petitionemail_get_address_block($contact_id);
@@ -689,7 +693,9 @@ function petitionemail_process_signature($activity_id, $profile_fields = NULL) {
     $subject = $default_subject;
   }
 
-  
+  // CiviCRM seems to htmlentitize everything submitted, but we don't
+  // want 3 > 1 in a subject line get converted to 3 &gt; 1 
+  $subject = html_entity_decode($subject);
 
   $from = NULL;
   if (empty($contact['email'])) {

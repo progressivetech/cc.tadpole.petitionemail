@@ -623,6 +623,10 @@ function petitionemail_process_signature($activity_id, $profile_fields = NULL) {
   $message_field = $petition_vars['message_field'];
   $subject_field = $petition_vars['subject_field'];
 
+  $activity = civicrm_api3("Activity", "getsingle", array ('id' => $activity_id));
+  $contact_id = $activity['source_contact_id'];
+  $contact = civicrm_api3("Contact", "getsingle", array ('id' => $contact_id));
+
   // Figure out whether to use the user-supplied message/subject or the default
   // message/subject.
   $petition_message = NULL;
@@ -652,6 +656,12 @@ function petitionemail_process_signature($activity_id, $profile_fields = NULL) {
     $petition_message = $default_message;
   }
 
+  // Add the sending contacts address info
+  $address_block = petitionemail_get_address_block($contact_id);
+  if($address_block) {
+    $petition_message = strip_tags($address_block) . "\n\n" . $petition_message;
+  }
+
   // If the petition has specified a subject field
   if(!empty($subject_field)) {
     // Check for a custom subject field value in the passed in profile fields.
@@ -679,9 +689,7 @@ function petitionemail_process_signature($activity_id, $profile_fields = NULL) {
     $subject = $default_subject;
   }
 
-  $activity = civicrm_api3("Activity", "getsingle", array ('id' => $activity_id));
-  $contact_id = $activity['source_contact_id'];
-  $contact = civicrm_api3("Contact", "getsingle", array ('id' => $contact_id));
+  
 
   $from = NULL;
   if (empty($contact['email'])) {
@@ -805,7 +813,24 @@ function petitionemail_process_signature($activity_id, $profile_fields = NULL) {
     }
   }
 }
- 
+
+function petitionemail_get_address_block($contact_id) {
+  $sql = "SELECT display_name, street_address, city, ".
+    "s.name, postal_code FROM civicrm_contact c JOIN ".
+    "civicrm_address a ON c.id = a.contact_id JOIN civicrm_state_province s ".  
+    "on a.state_province_id = s.id WHERE is_primary = 1 ".
+    "AND c.id = %0";
+  $params = array(0 => array($contact_id, 'Integer'));
+  $dao = CRM_Core_DAO::executeQuery($sql, $params);
+  $dao->fetch();
+  if($dao->N == 0) {
+    return NULL;
+  }
+  $fields = (array) $dao;
+  $block = $dao->display_name . "\n" . CRM_Utils_Address::format($fields);
+  return $block;
+}
+
 /**
  * Non custom data fields allowed to be a matching field.
  *

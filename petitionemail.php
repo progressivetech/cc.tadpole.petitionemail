@@ -1291,6 +1291,7 @@ function petitionemail_get_profile_params($key) {
          'is_active' => 1,
          'is_required' => 1,
          'label' => ts('Customize the message'),
+         'help_post' => ts('Your postal address will be automatically added to your message when it is sent.'),
          'field_type' => 'Activity',
        ),
        array(

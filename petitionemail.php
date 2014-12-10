@@ -230,14 +230,21 @@ function petitionemail_civicrm_buildForm( $formName, &$form ) {
       $form->add('select', 'matching_field' . $i, ts('Matching field(s)'), $field_options); 
       $i++;
     }
+    // We can't make default message and default subject required,
+    // otherwise users will get an error if they submit a petition
+    // that doesn't want to send an email to the target. So we have
+    // our own custom validation checking that only complains if 
+    // the user wants to send an email and we have to insert the 
+    // asterisk ourselves, manually.
+    $required = ' <span title="This field is required." class="crm-marker">*</span>';
     $form->add('select', 'location_type_id', ts('Email'), $location_options);
     $form->add('textarea', 'recipients', ts("Send petitions to"), 'rows=20 cols=100');
     $form->add('select', 'message_field', ts('Custom Message Field'),
       $custom_field_options);
     $form->add('select', 'subject_field', ts('Custom Subject Field'),
       $custom_field_options);
-    $form->add('textarea', 'default_message', ts('Default Message'), 'rows=20 cols=100');
-    $form->add('text', 'subject', ts('Default Email Subject Line'), array('size' => 70));
+    $form->add('textarea', 'default_message', ts('Default Message') . $required, 'rows=20 cols=100');
+    $form->add('text', 'subject', ts('Default Email Subject Line') . $required, array('size' => 70));
     $form->add('textarea', 'links', ts('Links to sign the petition'), 'rows=5')->freeze();
   }
 }

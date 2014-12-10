@@ -202,7 +202,7 @@ function petitionemail_civicrm_buildForm( $formName, &$form ) {
       $custom_field_options = array('' => t('- Select -'));
       $custom_field_options = $custom_field_options + $custom_fields;
     }
-    $choose_one = array('0' => ts('--choose one--'));
+    $choose_one = array('0' => ts('Primary'));
     $group_options = $choose_one + CRM_Core_PseudoConstant::group('Mailing');
     $location_options = $choose_one + 
       CRM_Core_PseudoConstant::get('CRM_Core_DAO_Address', 'location_type_id');

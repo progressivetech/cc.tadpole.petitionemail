@@ -29,6 +29,8 @@ function populateUserFieldOptions() {
   else {
     options[''] = "No activity profile selected.";
     cj('#message_field').append('<option value="">No activity profile selected.</option>');
+    cj('#subject_field').append('<option value="">No activity profile selected.</option>');
+
  }
 }
 

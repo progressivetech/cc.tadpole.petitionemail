@@ -858,7 +858,7 @@ function petitionemail_get_allowed_matching_fields() {
     'street_name' => 'civicrm_address',
     'city' => 'civicrm_address',
     'county_id' => 'civicrm_address',
-    'state_province_id' => 'civicrm_address',
+    'state_province' => 'civicrm_address',
     'postal_code' => 'civicrm_address',
     'postal_code_suffix' => 'civicrm_address',
     'country_id' => 'civicrm_address',
@@ -1042,6 +1042,17 @@ function petitionemail_get_recipients($contact_id, $petition_id) {
             if(!in_array('civicrm_address', $added_tables)) {
               $from[] = "LEFT JOIN civicrm_address a ON a.contact_id = c.id";
               $added_tables[] = 'civicrm_address';
+            }
+
+            // We have to make a special case for states, since the value we get
+            // from the user is the abbreviation rather than the state_province_id
+            // that is in the civicrm_address table.
+            if($field_name == 'state_province') {
+              if(!in_array('civicrm_state_province', $added_tables)) {
+                $from[] = "LEFT JOIN civicrm_state_province sp ON a.state_province_id = sp.id";
+                $added_tables[] = 'civicrm_state_province';
+              }
+              $field_name = 'sp.abbreviation';
             }
             $where_fragment[] = $field_name . ' = %' . $id;
             $where_fragment[] = 'a.is_primary = 1';

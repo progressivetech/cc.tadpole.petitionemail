@@ -829,7 +829,7 @@ function petitionemail_process_signature($activity_id, $profile_fields = NULL) {
 
 function petitionemail_get_address_block($contact_id) {
   $sql = "SELECT display_name, street_address, city, ".
-    "s.name, postal_code FROM civicrm_contact c JOIN ".
+    "s.abbreviation AS state_province, postal_code FROM civicrm_contact c JOIN ".
     "civicrm_address a ON c.id = a.contact_id JOIN civicrm_state_province s ".  
     "on a.state_province_id = s.id WHERE is_primary = 1 ".
     "AND c.id = %0";
@@ -839,8 +839,12 @@ function petitionemail_get_address_block($contact_id) {
   if($dao->N == 0) {
     return NULL;
   }
-  $fields = (array) $dao;
-  $block = $dao->display_name . "\n" . CRM_Utils_Address::format($fields);
+  $block = $dao->display_name . "\n" .
+    $dao->street_address . "\n" .
+    $dao->city . ", " .
+    $dao->state_province .
+    " " .
+    $dao->postal_code;
   return $block;
 }
 

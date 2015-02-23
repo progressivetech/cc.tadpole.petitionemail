@@ -970,8 +970,9 @@ function petitionemail_get_recipients($contact_id, $petition_id) {
     $params = array();
     $added_tables = array();
 
-    // Initialize the from clause
+    // Initialize the from clause and where clause
     $from[] = 'civicrm_contact c';
+    $where[] = 'c.is_deleted = 0';
 
     // We build a sub where clause that limits results based on the 
     // matching group and matching field that will be put together using

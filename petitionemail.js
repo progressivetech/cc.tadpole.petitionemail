@@ -3,6 +3,20 @@ cj(document).ready( function() {
   populateUserFieldOptions();
   cj("input#email_petition").click( function() { showHideEmailPetition(); });
   cj("#profile_id").change( function() { populateUserFieldOptions(); });
+
+  cj('.petitionemail-matching-group_id :input').each( function () { 
+    if (cj(this).val() > 0) {
+      cj("input.target-group").prop("checked", true);
+    }
+  });
+  if (cj('#recipients').val() != '') {
+    cj("input.target-individuals").prop("checked", true);
+  }
+  showHideTargetGroup();
+  showHideTargetIndividuals();
+  cj("input.target-group").click( function() { showHideTargetGroup(); });
+  cj("input.target-individuals").click( function() { showHideTargetIndividuals(); });
+
 });
 
 function populateUserFieldOptions() {
@@ -47,5 +61,20 @@ function showHideEmailPetition() {
     cj("tr.crm-campaign-survey-form-block-default_message").hide("fast");
     cj("tr.crm-campaign-survey-form-block-message_field").hide("fast");
     cj("tr.crm-campaign-survey-form-block-recipient_options").hide("fast");
+  }
+}
+
+function showHideTargetGroup() {
+  if (cj("input.target-group").prop("checked")) {
+    cj(".petition-email-target-group").show();
+  } else {
+    cj(".petition-email-target-group").hide();
+  }
+}
+function showHideTargetIndividuals() {
+  if (cj("input.target-individuals").prop("checked")) {
+    cj(".petition-email-target-individuals").show();
+  } else {
+    cj(".petition-email-target-individuals").hide();
   }
 }

@@ -432,8 +432,8 @@ function petitionemail_civicrm_postProcess( $formName, &$form ) {
     return; 
   }
   $email_petition = CRM_Utils_Array::value('email_petition', $form->_submitValues);
+  $survey_id = $form->getVar('_surveyId');
   if($email_petition && $email_petition  == 1 ) {
-    $survey_id = $form->getVar('_surveyId');
     $lastmoddate = 0;
     if (!$survey_id) {  // Ugly hack because the form doesn't return the id
       $params = array('title' =>$form->_submitValues['title']);
@@ -511,6 +511,16 @@ function petitionemail_civicrm_postProcess( $formName, &$form ) {
       }
       $i++;
     }
+  } else {
+    // This removes targets from petition
+    // If a petitions is initially configured to have targets, but they need to be removed.
+    $target_delete_params = array(0 => array($survey_id, 'Integer'));
+
+    $matching_target_delete_sql = "DELETE FROM civicrm_petition_email_matching_field WHERE petition_id = %0";
+    CRM_Core_DAO::executeQuery($matching_target_delete_sql, $target_delete_params);
+
+    $target_delete_sql = "DELETE FROM civicrm_petition_email WHERE petition_id = %0";
+    CRM_Core_DAO::executeQuery($target_delete_sql, $target_delete_params);
   }
 }
 

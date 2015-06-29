@@ -1162,12 +1162,14 @@ function petitionemail_parse_email_line($line) {
  * signature. 
  */
 function petitionemail_get_petition_id_for_activity($activity_id) {
-  // If there is a related civicrm_petition_email record, we are good to go.
-  // NOTE: source_record_id stores the survey_id which is the same thing
-  // as the petition_id for our purposes.
+  // If there is a related civicrm_petition_email record and it is the right
+  // activity type, then we are good to go.  NOTE: source_record_id stores the
+  // survey_id which is the same thing as the petition_id for our purposes.
   $sql = "SELECT a.source_record_id FROM civicrm_activity a JOIN
     civicrm_petition_email pe ON a.source_record_id = pe.petition_id
-    WHERE a.id = %0";
+    JOIN civicrm_option_value ov ON a.activity_type_id = ov.value 
+    JOIN civicrm_option_group og ON ov.option_group_id = og.id 
+    WHERE a.id = %0 AND og.name = 'activity_type' AND ov.name = 'Petition'";
   $params = array(0 => array($activity_id, 'Integer'));
   $dao = CRM_Core_DAO::executeQuery($sql, $params);
   $dao->fetch();

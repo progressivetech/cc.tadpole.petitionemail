@@ -199,7 +199,7 @@ function petitionemail_civicrm_buildForm( $formName, &$form ) {
       );
     }
     else {
-      $custom_field_options = array('' => t('- Select -'));
+      $custom_field_options = array('' => ts('- Select -'));
       $custom_field_options = $custom_field_options + $custom_fields;
     }
     $choose_one = array('0' => ts('Primary'));

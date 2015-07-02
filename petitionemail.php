@@ -195,7 +195,7 @@ function petitionemail_civicrm_buildForm( $formName, &$form ) {
     $custom_field_options = array();
     if(count($custom_fields) == 0) {
       $custom_field_options = array(
-        '' => t('- No Text or TextArea fields defined in your profiles -')
+        '' => ts('- No Text or TextArea fields defined in your profiles -')
       );
     }
     else {

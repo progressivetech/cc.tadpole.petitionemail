@@ -1,6 +1,6 @@
 <?xml version="1.0"?>
 <extension key="cc.tadpole.petitionemail" type="module">
-  <downloadUrl>https://github.com/progressivetech/net.ourpowerbase.petitionemail/archive/master.zip</downloadUrl>
+  <documentation>https://github.com/progressivetech/net.ourpowerbase.petitionemail/blob/master/petition-email-user-manual.odt?raw=true</documentation>
   <file>petitionemail</file>
   <name>Petition Email</name>
   <description>Email petition signatures to static or dynamic list of selected recipients</description>
@@ -11,7 +11,6 @@
   </maintainer>
   <releaseDate>2013-12-16</releaseDate>
   <version>2.0</version>
-  <develStage>stable</develStage>
   <compatibility>
     <ver>4.4</ver>
     <ver>4.5</ver>

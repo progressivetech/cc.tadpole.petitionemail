@@ -1425,15 +1425,21 @@ function petitionemail_remove_profiles() {
         'uf_group_id' => $ret,
         'return' => array('id')
       );
-      $results = civicrm_api3('UFField', 'get', $params);
-      if(is_array($results['values'])) {
-        while(list($id) = each($results['values'])) {
-          $params = array('id' => $id);
-          civicrm_api3('UFField', 'delete', $params);
+      try {
+        $results = civicrm_api3('UFField', 'get', $params);
+        if(is_array($results['values'])) {
+          while(list($id) = each($results['values'])) {
+            $params = array('id' => $id);
+            civicrm_api3('UFField', 'delete', $params);
+          }
         }
+        $params = array('id' => $ret);
+        civicrm_api3('UFGroup', 'delete', $params);
       }
-      $params = array('id' => $ret);
-      civicrm_api3('UFGroup', 'delete', $params);
+      catch (CiviCRM_API3_Exception $e) {
+        // NOOP - will get error if this group doesn't exist.
+        continue;
+      }
     }
   }
 }
@@ -1455,15 +1461,21 @@ function petitionemail_remove_custom_fields() {
         'custom_group_id' => $ret,
         'return' => array('id')
       );
-      $results = civicrm_api3('CustomField', 'get', $params);
-      if(is_array($results['values'])) {
-        while(list($id) = each($results['values'])) {
-          $params = array('id' => $id);
-          civicrm_api3('CustomField', 'delete', $params);
+      try {
+        $results = civicrm_api3('CustomField', 'get', $params);
+        if(is_array($results['values'])) {
+          while(list($id) = each($results['values'])) {
+            $params = array('id' => $id);
+            civicrm_api3('CustomField', 'delete', $params);
+          }
         }
+        $params = array('id' => $ret);
+        civicrm_api3('CustomGroup', 'delete', $params);
       }
-      $params = array('id' => $ret);
-      civicrm_api3('CustomGroup', 'delete', $params);
+      catch (CiviCRM_API3_Exception $e) {
+        // NOOP - will get error if this group doesn't exist.
+        continue;
+      }
     }
   }
 }
@@ -1573,7 +1585,7 @@ function petitionemail_create_custom_fields() {
  */
 function petitionemail_remove_variables() {
   $group = 'petitionemail';
-  $sql = "DELETE FROM civicrm_setting WHERE name LIKE 'petitionemail_%";
+  $sql = "DELETE FROM civicrm_setting WHERE name LIKE 'petitionemail_%'";
   $params = array(
     0 => array($group, 'String')
   );

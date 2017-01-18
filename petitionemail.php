@@ -1364,7 +1364,7 @@ function petitionemail_get_profile_id($key) {
     }
     // Delete this variable - probably the user deleted the profile not knowing
     // what it was used for.
-    $sql = "DELETE FROM civicrm_setting WHERE group_name = %0 AND name = %1";
+    $sql = "DELETE FROM civicrm_setting WHERE name = %1";
     $params = array(
       0 => array($group, 'String'),
       1 => array($key, 'String')
@@ -1485,7 +1485,7 @@ function petitionemail_create_custom_fields() {
     }
     // Delete this variable - probably the user deleted the profile not knowing
     // what it was used for.
-    $sql = "DELETE FROM civicrm_setting WHERE group_name = %0 AND name = %1";
+    $sql = "DELETE FROM civicrm_setting WHERE name = %1";
     $params = array(
       0 => array($group, 'String'),
       1 => array($key, 'String')
@@ -1573,7 +1573,7 @@ function petitionemail_create_custom_fields() {
  */
 function petitionemail_remove_variables() {
   $group = 'petitionemail';
-  $sql = "DELETE FROM civicrm_setting WHERE group_name = %0";
+  $sql = "DELETE FROM civicrm_setting WHERE name LIKE 'petitionemail_%";
   $params = array(
     0 => array($group, 'String')
   );

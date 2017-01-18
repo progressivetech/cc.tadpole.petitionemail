@@ -17,6 +17,7 @@
     <ver>4.4</ver>
     <ver>4.5</ver>
     <ver>4.6</ver>
+    <ver>4.7</ver>
   </compatibility>
   <comments>This extension is a complete re-write of the extension ported by Palante by Joseph Lacey from the original Drupal Petition Email module</comments>
   <civix>

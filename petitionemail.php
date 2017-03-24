@@ -513,14 +513,17 @@ function petitionemail_civicrm_postProcess( $formName, &$form ) {
     }
   } else {
     // This removes targets from petition
-    // If a petitions is initially configured to have targets, but they need to be removed.
-    $target_delete_params = array(0 => array($survey_id, 'Integer'));
+    // Only remove targets if the petition has been saved.
+    if ($survey_id) {
+      // If a petitions is initially configured to have targets, but they need to be removed.
+      $target_delete_params = array(0 => array($survey_id, 'Integer'));
 
-    $matching_target_delete_sql = "DELETE FROM civicrm_petition_email_matching_field WHERE petition_id = %0";
-    CRM_Core_DAO::executeQuery($matching_target_delete_sql, $target_delete_params);
+      $matching_target_delete_sql = "DELETE FROM civicrm_petition_email_matching_field WHERE petition_id = %0";
+      CRM_Core_DAO::executeQuery($matching_target_delete_sql, $target_delete_params);
 
-    $target_delete_sql = "DELETE FROM civicrm_petition_email WHERE petition_id = %0";
-    CRM_Core_DAO::executeQuery($target_delete_sql, $target_delete_params);
+      $target_delete_sql = "DELETE FROM civicrm_petition_email WHERE petition_id = %0";
+      CRM_Core_DAO::executeQuery($target_delete_sql, $target_delete_params);
+    }
   }
 }
 

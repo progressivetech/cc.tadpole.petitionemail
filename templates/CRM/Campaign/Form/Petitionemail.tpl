@@ -23,6 +23,11 @@
        <td class="view-value">{$form.message_field.html}
       <div class="description">{ts}Select a field that will have the signer's custom message.  Make sure it is included in the Activity Profile you selected.{/ts}</div></td>
    </tr>
+  <tr class="crm-campaign-survey-form-block-message_field">
+       <td class="label">{$form.insert_address.label}</td>
+       <td class="view-value">{$form.insert_address.html}
+      <div class="description">{ts}Insert the sender's address in the email that is sent to the target.{/ts}</div></td>
+   </tr>
 
    <tr class="crm-campaign-survey-form-block-recipient_options">
        <td class="label">Target/Recipient Options</td>

@@ -10,6 +10,7 @@ CREATE TABLE IF NOT EXISTS `civicrm_petition_email` (
   `subject_field` varchar(255) DEFAULT NULL COMMENT "The custom field used to store the petition signer's personal subject.",
   `subject` varchar(128) DEFAULT NULL COMMENT 'The subject line for outgoing emails.',
   `recipients` text COMMENT 'The name and email address of additional targets that should receive a copy of all petitions signed, separated by line breaks.',
+  `insert_address` int(1) DEFAULT 1 COMMENT 'Whether or not to insert the sender address into the email.',
   PRIMARY KEY (`petition_id`),
   KEY `petition_id` (`petition_id`),
   CONSTRAINT `FK_civicrm_petition_email_petition_id` FOREIGN KEY (`petition_id`) REFERENCES `civicrm_survey` (`id`) ON DELETE CASCADE

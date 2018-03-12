@@ -96,7 +96,7 @@ function petitionemail_civicrm_buildForm( $formName, &$form ) {
                   subject, 
                   message_field, 
                   subject_field,
-                  subject 
+                  subject
              FROM civicrm_petition_email 
              WHERE petition_id = %1";
       $params = array( 1 => array( $survey_id, 'Integer' ) );
@@ -126,7 +126,8 @@ function petitionemail_civicrm_buildForm( $formName, &$form ) {
                 subject_field,
                 subject,
                 recipients,
-                location_type_id
+                location_type_id,
+                insert_address
               FROM civicrm_petition_email 
               WHERE petition_id = %1";
       $params = array( 1 => array( $survey_id, 'Integer' ) );
@@ -139,6 +140,7 @@ function petitionemail_civicrm_buildForm( $formName, &$form ) {
         $defaults['default_message'] = $dao->default_message;
         $defaults['message_field'] = $dao->message_field;
         $defaults['subject_field'] = $dao->subject_field;
+        $defaults['insert_address'] = $dao->insert_address;
         $defaults['subject'] = $dao->subject;
         $defaults['location_type_id'] = $dao->location_type_id;
         
@@ -168,7 +170,8 @@ function petitionemail_civicrm_buildForm( $formName, &$form ) {
       $form->setDefaults(
         array(
           'links' => ts("Please save the petition first, then you can copy and
-             paste the link to sign the petition.")
+             paste the link to sign the petition."),
+          'insert_address' => 1
         )
       );
     }
@@ -241,6 +244,7 @@ function petitionemail_civicrm_buildForm( $formName, &$form ) {
     $form->add('textarea', 'recipients', ts("Send petitions to"), 'rows=20 cols=100');
     $form->add('select', 'message_field', ts('Custom Message Field'),
       $custom_field_options);
+    $form->add('checkbox', 'insert_address', ts("Insert address"));
     $form->add('select', 'subject_field', ts('Custom Subject Field'),
       $custom_field_options);
     $form->add('textarea', 'default_message', ts('Default Message') . $required, 'rows=20 cols=100');
@@ -460,6 +464,7 @@ function petitionemail_civicrm_postProcess( $formName, &$form ) {
     $subject = $form->_submitValues['subject'];
     $recipients = $form->_submitValues['recipients'];
     $location_type_id = $form->_submitValues['location_type_id'];
+    $insert_address = isset($form->_submitValues['insert_address']) ? 1 : 0;
 
     $sql = "REPLACE INTO civicrm_petition_email (
              petition_id,
@@ -468,7 +473,8 @@ function petitionemail_civicrm_postProcess( $formName, &$form ) {
              subject_field, 
              subject,
              recipients,
-             location_type_id
+             location_type_id,
+             insert_address
            ) VALUES ( 
              %1, 
              %2, 
@@ -476,7 +482,8 @@ function petitionemail_civicrm_postProcess( $formName, &$form ) {
              %4,
              %5,
              %6,
-             %7
+             %7,
+             %8
     )";
     $params = array( 
       1 => array( $survey_id, 'Integer' ),
@@ -486,6 +493,7 @@ function petitionemail_civicrm_postProcess( $formName, &$form ) {
       5 => array( $subject, 'String' ),
       6 => array( $recipients, 'String' ),
       7 => array( $location_type_id, 'Integer' ),
+      8 => array( $insert_address, 'Integer' ),
     );
     $petitionemail = CRM_Core_DAO::executeQuery( $sql, $params );
     
@@ -588,7 +596,8 @@ function petitionemail_get_petition_details($petition_id) {
                subject_field,
                subject,
                location_type_id,
-               recipients
+               recipients,
+               insert_address
          FROM civicrm_petition_email
          WHERE petition_id = %1 GROUP BY petition_id";
   $params = array( 1 => array( $petition_id, 'Integer' ) );
@@ -606,6 +615,7 @@ function petitionemail_get_petition_details($petition_id) {
   $ret['message_field'] = $petition_email->message_field;
   $ret['subject_field'] = $petition_email->subject_field;
   $ret['recipients'] = $petition_email->recipients;
+  $ret['insert_address'] = $petition_email->insert_address;
 
   // Now retrieve the matching fields, if any
   $sql = "SELECT matching_field, matching_group_id FROM
@@ -642,6 +652,7 @@ function petitionemail_process_signature($activity_id, $profile_fields = NULL) {
   $default_subject = $petition_vars['subject'];
   $message_field = $petition_vars['message_field'];
   $subject_field = $petition_vars['subject_field'];
+  $insert_address = $petition_vars['insert_address'];
 
   $activity = civicrm_api3("Activity", "getsingle", array ('id' => $activity_id));
   $contact_id = $activity['source_contact_id'];
@@ -681,9 +692,12 @@ function petitionemail_process_signature($activity_id, $profile_fields = NULL) {
   $petition_message = html_entity_decode($petition_message);
 
   // Add the sending contacts address info
-  $address_block = petitionemail_get_address_block($contact_id);
-  if($address_block) {
-    $petition_message = strip_tags($address_block) . "\n\n" . $petition_message;
+  if ($insert_address == 1) {
+    $address_block = petitionemail_get_address_block($contact_id);
+
+    if($address_block) {
+      $petition_message = strip_tags($address_block) . "\n\n" . $petition_message;
+    }
   }
 
   // If the petition has specified a subject field

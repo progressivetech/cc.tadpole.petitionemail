@@ -92,4 +92,11 @@ class CRM_Petitionemail_Upgrader extends CRM_Petitionemail_Upgrader_Base {
     return TRUE;
   }
 
+  /**
+   * Add field to allow opting out of sending address.
+   */
+  function upgrade_1004() {
+    if(!$this->executeSqlFile('sql/Petitionemail_1004_upgrade.sql')) return FALSE;
+    return TRUE;
+  }
 }

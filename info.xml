@@ -5,7 +5,7 @@
   </urls>
   <file>petitionemail</file>
   <name>Petition Email</name>
-  <description>Email petition signatures to static or dynamic list of selected recipients</description>
+  <description>DEPRECATED. Please do not use this extension.</description>
   <license>AGPL</license>
   <maintainer>
     <author>Jamie McClelland</author>
@@ -19,7 +19,7 @@
     <ver>4.6</ver>
     <ver>4.7</ver>
   </compatibility>
-  <comments>This extension is a complete re-write of the extension ported by Palante by Joseph Lacey from the original Drupal Petition Email module</comments>
+  <comments>This extension is has been superceded by the com.aghstrategies.petitionemail extension. Please use that one instead.</comments>
   <civix>
     <namespace>CRM/Petitionemail</namespace>
   </civix>

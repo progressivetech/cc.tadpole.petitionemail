@@ -35,8 +35,11 @@ function petitionemail_civicrm_install() {
  */
 function petitionemail_civicrm_uninstall() {
   // Clear out our variables.
-  petitionemail_remove_profiles();
-  petitionemail_remove_custom_fields();
+  // NOTE: do not remove profiles or fields - preserve data
+  // to avoid breaking existing petitions that might use
+  // the profiles or fields.
+  // petitionemail_remove_profiles();
+  // petitionemail_remove_custom_fields();
   petitionemail_remove_variables();
   return _petitionemail_civix_civicrm_uninstall();
 }

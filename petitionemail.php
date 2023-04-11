@@ -1217,7 +1217,7 @@ function petitionemail_is_actionable_activity($activity_id) {
   if(!petitionemail_get_petition_id_for_activity($activity_id)) {
     return FALSE;
   }
-  $completed = CRM_Core_OptionGroup::getValue('activity_status', 'Completed', 'name');
+  $completed = CRM_Core_PseudoConstant::getKey('CRM_Activity_BAO_Activity', 'activity_status_id', 'Completed');
   $sql = "SELECT id FROM civicrm_activity WHERE id = %0 AND status_id = %1";
   $params = array(0 => array($activity_id, 'Integer'), 1 => array($completed, 'Integer'));
   $dao = CRM_Core_DAO::executeQuery($sql, $params);

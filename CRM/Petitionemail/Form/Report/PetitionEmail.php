@@ -111,7 +111,7 @@ class CRM_Petitionemail_Form_Report_PetitionEmail extends CRM_Report_Form {
       $group_id = intval($this->_params['group_id_value']);
     }
     $petition_activity_type_id = 
-      intval(CRM_Core_OptionGroup::getValue('activity_type', 'Petition', 'name'));
+      intval(\CRM_Core_PseudoConstant::getKey('CRM_Activity_BAO_Activity', 'activity_type_id', 'Petition'));
     $activityContacts =
       CRM_Core_OptionGroup::values('activity_contacts', FALSE, FALSE, FALSE, NULL, 'name');
     $source_activity_record_type_id =
@@ -188,7 +188,7 @@ class CRM_Petitionemail_Form_Report_PetitionEmail extends CRM_Report_Form {
     $target_activity_record_type_id =
       intval(CRM_Utils_Array::key('Activity Targets', $activityContacts));
     $email_activity_type_id = 
-      intval(CRM_Core_OptionGroup::getValue('activity_type', 'Email', 'name'));
+      intval(\CRM_Core_PseudoConstant::getKey('CRM_Activity_BAO_Activity', 'activity_type_id', 'Email'));
 
     $sql = "SELECT DISTINCT c.id, display_name FROM civicrm_contact c JOIN
       civicrm_activity_contact ac ON c.id = ac.contact_id WHERE record_type_id = %0
